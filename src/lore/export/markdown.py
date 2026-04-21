@@ -9,7 +9,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from lore.graph.edges import list_edges
 from lore.graph.queries import list_nodes
 
 
@@ -47,9 +46,16 @@ def export_markdown(conn: sqlite3.Connection, out_dir: str | Path) -> list[Path]
     paths."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+
+    edges_by_source: dict[str, list[dict]] = {}
+    for row in conn.execute(
+        "SELECT from_id, to_id, relation FROM edges ORDER BY created_at"
+    ).fetchall():
+        edges_by_source.setdefault(row["from_id"], []).append(dict(row))
+
     written: list[Path] = []
     for node in list_nodes(conn):
-        outgoing = list_edges(conn, from_id=node["id"])
+        outgoing = edges_by_source.get(node["id"], [])
         type_dir = out / node["type"]
         type_dir.mkdir(exist_ok=True)
         path = type_dir / f"{node['id']}.md"

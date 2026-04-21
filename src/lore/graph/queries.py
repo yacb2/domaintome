@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from typing import Any
 
-from lore.graph.nodes import _row_to_dict as _node_row_to_dict
+from lore.graph._common import placeholders as _ph
+from lore.graph._common import row_to_dict
 from lore.graph.nodes import get_node
 from lore.graph.schema import GENERIC_ID_WORDS, NODE_TYPES, is_valid_id
 
-
-def _edge_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-    d = dict(row)
-    meta = d.pop("metadata_json", None)
-    d["metadata"] = json.loads(meta) if meta else {}
-    return d
+CYCLE_RELATIONS: tuple[str, ...] = ("supersedes", "depends_on", "triggers")
 
 
 def list_nodes(
@@ -38,7 +33,7 @@ def list_nodes(
     rows = conn.execute(
         f"SELECT * FROM nodes {where} ORDER BY type, id", values
     ).fetchall()
-    nodes = [_node_row_to_dict(r) for r in rows]
+    nodes = [row_to_dict(r) for r in rows]
     if tag is not None:
         nodes = [n for n in nodes if tag in n.get("metadata", {}).get("tags", [])]
     return nodes
@@ -68,20 +63,20 @@ def query(
     for _ in range(max(depth, 0)):
         if not frontier:
             break
-        placeholders = ",".join("?" * len(frontier))
+        ph = _ph(len(frontier))
         rows = conn.execute(
             f"""
             SELECT * FROM nodes WHERE id IN (
-                SELECT to_id FROM edges WHERE from_id IN ({placeholders})
+                SELECT to_id FROM edges WHERE from_id IN ({ph})
                 UNION
-                SELECT from_id FROM edges WHERE to_id IN ({placeholders})
+                SELECT from_id FROM edges WHERE to_id IN ({ph})
             )
             """,
             frontier + frontier,
         ).fetchall()
         next_frontier: list[str] = []
         for r in rows:
-            node = _node_row_to_dict(r)
+            node = row_to_dict(r)
             if node["id"] not in seen_ids:
                 seen_ids.add(node["id"])
                 all_nodes[node["id"]] = node
@@ -105,12 +100,12 @@ def _resolve_query(conn: sqlite3.Connection, text: str) -> list[dict[str, Any]]:
         (like,),
     ).fetchall()
     if rows:
-        return [_node_row_to_dict(r) for r in rows]
+        return [row_to_dict(r) for r in rows]
     # Tag fallback
     all_nodes = conn.execute("SELECT * FROM nodes").fetchall()
     matches: list[dict[str, Any]] = []
     for r in all_nodes:
-        node = _node_row_to_dict(r)
+        node = row_to_dict(r)
         if text in node.get("metadata", {}).get("tags", []):
             matches.append(node)
     return matches
@@ -121,17 +116,17 @@ def _edges_within(
 ) -> list[dict[str, Any]]:
     if not node_ids:
         return []
-    placeholders = ",".join("?" * len(node_ids))
+    ph = _ph(len(node_ids))
     ids = list(node_ids)
     rows = conn.execute(
         f"""
         SELECT * FROM edges
-        WHERE from_id IN ({placeholders}) AND to_id IN ({placeholders})
+        WHERE from_id IN ({ph}) AND to_id IN ({ph})
         ORDER BY relation, from_id, to_id
         """,
         ids + ids,
     ).fetchall()
-    return [_edge_row_to_dict(r) for r in rows]
+    return [row_to_dict(r) for r in rows]
 
 
 def traverse(
@@ -156,18 +151,16 @@ def traverse(
     for _ in range(max(max_depth, 0)):
         if not frontier:
             break
-        placeholders = ",".join("?" * len(frontier))
-        edge_sql = f"SELECT * FROM edges WHERE from_id IN ({placeholders})"
+        edge_sql = f"SELECT * FROM edges WHERE from_id IN ({_ph(len(frontier))})"
         params: list[Any] = list(frontier)
         if relations:
-            rel_placeholders = ",".join("?" * len(relations))
-            edge_sql += f" AND relation IN ({rel_placeholders})"
+            edge_sql += f" AND relation IN ({_ph(len(relations))})"
             params.extend(relations)
         edge_rows = conn.execute(edge_sql, params).fetchall()
 
         next_frontier: list[str] = []
         for e in edge_rows:
-            edge = _edge_row_to_dict(e)
+            edge = row_to_dict(e)
             collected_edges.append(edge)
             if edge["to_id"] not in seen_ids:
                 seen_ids.add(edge["to_id"])
@@ -196,14 +189,15 @@ def find_variants(
         """,
         (capability_id,),
     ).fetchall()
-    return [_node_row_to_dict(r) for r in rows]
+    return [row_to_dict(r) for r in rows]
 
 
 def audit(conn: sqlite3.Connection) -> dict[str, Any]:
     """Run structural checks against the graph.
 
     Returns a dict with lists: `orphans`, `dangling_edges`, `invalid_ids`,
-    `generic_ids`, `unknown_types`, `cycles_supersedes`.
+    `generic_ids`, `unknown_types`, and one `cycles_<relation>` key per
+    entry in :data:`CYCLE_RELATIONS`.
     """
     findings: dict[str, list[Any]] = {
         "orphans": [],
@@ -211,28 +205,26 @@ def audit(conn: sqlite3.Connection) -> dict[str, Any]:
         "invalid_ids": [],
         "generic_ids": [],
         "unknown_types": [],
-        "cycles_supersedes": [],
     }
+    for rel in CYCLE_RELATIONS:
+        findings[f"cycles_{rel}"] = []
 
     all_nodes = conn.execute("SELECT id, type FROM nodes").fetchall()
     node_ids = {r["id"] for r in all_nodes}
 
-    # Orphans: no incoming and no outgoing edges.
-    for r in all_nodes:
-        nid = r["id"]
-        has_edge = conn.execute(
-            "SELECT 1 FROM edges WHERE from_id = ? OR to_id = ? LIMIT 1",
-            (nid, nid),
-        ).fetchone()
-        if not has_edge:
-            findings["orphans"].append(nid)
+    connected = {
+        row["id"]
+        for row in conn.execute(
+            "SELECT from_id AS id FROM edges UNION SELECT to_id AS id FROM edges"
+        ).fetchall()
+    }
+    findings["orphans"] = sorted(node_ids - connected)
 
-    # Dangling edges: FK should prevent this, but scan defensively.
+    # FK cascade should prevent this; defensive scan catches legacy rows.
     for r in conn.execute("SELECT from_id, to_id, relation FROM edges").fetchall():
         if r["from_id"] not in node_ids or r["to_id"] not in node_ids:
             findings["dangling_edges"].append(dict(r))
 
-    # ID hygiene.
     for r in all_nodes:
         nid = r["id"]
         if not is_valid_id(nid):
@@ -242,15 +234,15 @@ def audit(conn: sqlite3.Connection) -> dict[str, Any]:
         if r["type"] not in NODE_TYPES:
             findings["unknown_types"].append({"id": nid, "type": r["type"]})
 
-    # Cycles in supersedes (a supersedes-chain forming a loop is illegal).
-    findings["cycles_supersedes"] = _find_supersedes_cycles(conn)
+    for rel in CYCLE_RELATIONS:
+        findings[f"cycles_{rel}"] = _find_cycles(conn, rel)
 
     return findings
 
 
-def _find_supersedes_cycles(conn: sqlite3.Connection) -> list[list[str]]:
+def _find_cycles(conn: sqlite3.Connection, relation: str) -> list[list[str]]:
     edges = conn.execute(
-        "SELECT from_id, to_id FROM edges WHERE relation = 'supersedes'"
+        "SELECT from_id, to_id FROM edges WHERE relation = ?", (relation,)
     ).fetchall()
     graph: dict[str, list[str]] = {}
     for e in edges:
@@ -258,20 +250,33 @@ def _find_supersedes_cycles(conn: sqlite3.Connection) -> list[list[str]]:
 
     cycles: list[list[str]] = []
     visited: set[str] = set()
-
-    def dfs(node: str, stack: list[str]) -> None:
-        if node in stack:
-            cycles.append(stack[stack.index(node):] + [node])
-            return
-        if node in visited:
-            return
-        visited.add(node)
-        stack.append(node)
-        for nxt in graph.get(node, []):
-            dfs(nxt, stack)
-        stack.pop()
-
+    on_stack: set[str] = set()
+    # Iterative DFS: each stack frame holds (node, iterator over children).
+    # Avoids Python recursion limits on deep chains (supersedes, depends_on).
     for start in list(graph.keys()):
-        dfs(start, [])
+        if start in visited:
+            continue
+        path: list[str] = []
+        work: list[tuple[str, Any]] = [(start, iter(graph.get(start, [])))]
+        visited.add(start)
+        on_stack.add(start)
+        path.append(start)
+        while work:
+            node, children = work[-1]
+            nxt = next(children, None)
+            if nxt is None:
+                on_stack.discard(node)
+                path.pop()
+                work.pop()
+                continue
+            if nxt in on_stack:
+                cycles.append(path[path.index(nxt):] + [nxt])
+                continue
+            if nxt in visited:
+                continue
+            visited.add(nxt)
+            on_stack.add(nxt)
+            path.append(nxt)
+            work.append((nxt, iter(graph.get(nxt, []))))
 
     return cycles

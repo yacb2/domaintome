@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
 from typing import Any
 
+from lore.graph._common import now_iso, row_to_dict
 from lore.graph.schema import (
     SchemaError,
     validate_id,
@@ -14,16 +14,9 @@ from lore.graph.schema import (
     validate_status,
 )
 
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-    d = dict(row)
-    meta = d.pop("metadata_json", None)
-    d["metadata"] = json.loads(meta) if meta else {}
-    return d
+# Back-compat aliases for any external code that imported these.
+_now = now_iso
+_row_to_dict = row_to_dict
 
 
 def add_node(
@@ -44,7 +37,7 @@ def add_node(
     if not title or not title.strip():
         raise SchemaError("title is required and cannot be empty")
 
-    now = _now()
+    now = now_iso()
     meta_json = json.dumps(metadata) if metadata else None
     conn.execute(
         """
@@ -95,7 +88,7 @@ def update_node(
         return existing
 
     fields.append("updated_at = ?")
-    values.append(_now())
+    values.append(now_iso())
     values.append(node_id)
     conn.execute(
         f"UPDATE nodes SET {', '.join(fields)} WHERE id = ?",
@@ -116,4 +109,4 @@ def delete_node(conn: sqlite3.Connection, node_id: str) -> bool:
 def get_node(conn: sqlite3.Connection, node_id: str) -> dict[str, Any] | None:
     """Fetch a node by id. Returns None if not found."""
     row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
-    return _row_to_dict(row) if row else None
+    return row_to_dict(row) if row else None
