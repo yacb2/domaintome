@@ -14,10 +14,6 @@ from lore.graph.schema import (
     validate_status,
 )
 
-# Back-compat aliases for any external code that imported these.
-_now = now_iso
-_row_to_dict = row_to_dict
-
 
 def add_node(
     conn: sqlite3.Connection,
@@ -153,4 +149,16 @@ def add_nodes_batch(
         prepared,
     )
     conn.commit()
-    return [get_node(conn, s["id"]) for s in specs]  # type: ignore[misc]
+    return [
+        {
+            "id": s["id"],
+            "type": s["type"],
+            "title": s["title"],
+            "body": s.get("body"),
+            "status": s.get("status", "active"),
+            "metadata": s.get("metadata") or {},
+            "created_at": now,
+            "updated_at": now,
+        }
+        for s in specs
+    ]

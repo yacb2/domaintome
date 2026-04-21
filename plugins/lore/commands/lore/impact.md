@@ -2,6 +2,7 @@
 description: Blast-radius analysis — what nodes are affected if this one changes?
 argument-hint: <node-id>
 allowed-tools: [Bash]
+model: haiku
 ---
 
 Answer "what breaks if I touch `$ARGUMENTS`?" by:

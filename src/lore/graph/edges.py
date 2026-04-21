@@ -6,7 +6,7 @@ import json
 import sqlite3
 from typing import Any
 
-from lore.graph._common import now_iso, row_to_dict
+from lore.graph._common import now_iso, placeholders, row_to_dict
 from lore.graph.nodes import get_node
 from lore.graph.schema import SchemaError, validate_edge_types
 
@@ -74,17 +74,27 @@ def add_edges_batch(
     prepared: list[tuple[Any, ...]] = []
     now = now_iso()
     results: list[dict[str, Any]] = []
+
+    referenced = {s["from_id"] for s in specs} | {s["to_id"] for s in specs}
+    if referenced:
+        ids = list(referenced)
+        rows = conn.execute(
+            f"SELECT id, type FROM nodes WHERE id IN ({placeholders(len(ids))})",
+            ids,
+        ).fetchall()
+        types_by_id = {r["id"]: r["type"] for r in rows}
+    else:
+        types_by_id = {}
+
     for s in specs:
         from_id = s["from_id"]
         to_id = s["to_id"]
         relation = s["relation"]
-        from_node = get_node(conn, from_id)
-        if from_node is None:
+        if from_id not in types_by_id:
             raise SchemaError(f"Source node {from_id!r} not found")
-        to_node = get_node(conn, to_id)
-        if to_node is None:
+        if to_id not in types_by_id:
             raise SchemaError(f"Target node {to_id!r} not found")
-        validate_edge_types(relation, from_node["type"], to_node["type"])
+        validate_edge_types(relation, types_by_id[from_id], types_by_id[to_id])
         meta = s.get("metadata")
         prepared.append(
             (from_id, to_id, relation, json.dumps(meta) if meta else None, now)

@@ -8,10 +8,11 @@ Bootstrap Lore on a larger project using an economical scan:
 1. **Ensure the DB exists.** If `.lore/lore.db` does not exist, run
    `lore init` first.
 
-2. **Delegate discovery to a Haiku sub-agent** to keep the cost low. Invoke
-   the `Agent` tool with:
+2. **Delegate discovery to a cheap sub-agent** to keep the cost low. If
+   `.lore/config.json` exists and has `models.exploration`, use that;
+   otherwise default to `haiku`. Invoke the `Agent` tool with:
    - `subagent_type`: `"general-purpose"`
-   - `model`: `"haiku"`
+   - `model`: configured exploration model (default `"haiku"`)
    - `description`: `"Scan repo for Lore seed"`
    - `prompt`: (use the template below, adapted to the current project)
 
@@ -61,9 +62,13 @@ Bootstrap Lore on a larger project using an economical scan:
 5. **Run `lore_audit()`** and report any findings.
 
 6. **Create `.lore/config.json`** if it doesn't exist, seeded with the
-   detected language and app name:
+   detected language, app name and default model routing:
    ```json
-   { "language": "es", "app_name": "..." }
+   {
+     "language": "es",
+     "app_name": "...",
+     "models": { "exploration": "haiku", "write": "sonnet" }
+   }
    ```
 
 Keep the final summary brief: how many nodes/edges were persisted, and a

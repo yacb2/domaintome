@@ -1,6 +1,7 @@
 ---
 description: Run Lore audit and report health (orphans, dangling edges, id hygiene, cycles).
 allowed-tools: [Bash]
+model: haiku
 ---
 
 Run `lore_audit()` and summarize the findings:
