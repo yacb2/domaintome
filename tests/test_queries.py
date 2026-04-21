@@ -109,3 +109,29 @@ def test_audit_detects_supersedes_cycle(conn):
     add_edge(conn, from_id="b", to_id="a", relation="supersedes")
     report = audit(conn)
     assert report["cycles_supersedes"], "should detect cycle"
+
+
+def test_audit_detects_depends_on_cycle(conn):
+    add_node(conn, node_id="m1", type="module", title="M1")
+    add_node(conn, node_id="m2", type="module", title="M2")
+    add_edge(conn, from_id="m1", to_id="m2", relation="depends_on")
+    add_edge(conn, from_id="m2", to_id="m1", relation="depends_on")
+    report = audit(conn)
+    assert report["cycles_depends_on"], "should detect depends_on cycle"
+    assert not report["cycles_supersedes"], "wrong relation should not trigger"
+
+
+def test_audit_detects_triggers_cycle(conn):
+    add_node(conn, node_id="e1", type="event", title="e1")
+    add_node(conn, node_id="e2", type="event", title="e2")
+    add_edge(conn, from_id="e1", to_id="e2", relation="triggers")
+    add_edge(conn, from_id="e2", to_id="e1", relation="triggers")
+    report = audit(conn)
+    assert report["cycles_triggers"], "should detect triggers cycle"
+
+
+def test_audit_acyclic_graph_has_no_cycles(seeded_conn):
+    report = audit(seeded_conn)
+    assert report["cycles_supersedes"] == []
+    assert report["cycles_depends_on"] == []
+    assert report["cycles_triggers"] == []

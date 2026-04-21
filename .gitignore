@@ -53,3 +53,10 @@ Thumbs.db
 # (we publish to pypi). Revisit if we ever ship a dev container.
 uv.lock
 poetry.lock
+
+# Lore local databases & reports
+.lore/*.db
+.lore/*.db-journal
+.lore/*.db-wal
+.lore/*.db-shm
+.lore/stress_report.json

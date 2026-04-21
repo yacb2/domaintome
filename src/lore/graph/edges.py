@@ -4,22 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
 from typing import Any
 
+from lore.graph._common import now_iso, row_to_dict
 from lore.graph.nodes import get_node
 from lore.graph.schema import SchemaError, validate_edge_types
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-    d = dict(row)
-    meta = d.pop("metadata_json", None)
-    d["metadata"] = json.loads(meta) if meta else {}
-    return d
 
 
 def add_edge(
@@ -41,7 +30,7 @@ def add_edge(
 
     validate_edge_types(relation, from_node["type"], to_node["type"])
 
-    now = _now()
+    now = now_iso()
     meta_json = json.dumps(metadata) if metadata else None
     conn.execute(
         """
@@ -97,4 +86,4 @@ def list_edges(
         values.append(relation)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(f"SELECT * FROM edges {where} ORDER BY created_at", values).fetchall()
-    return [_row_to_dict(r) for r in rows]
+    return [row_to_dict(r) for r in rows]
