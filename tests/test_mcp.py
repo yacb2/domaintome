@@ -34,6 +34,82 @@ async def test_build_server_registers_tools(tmp_path):
     assert expected <= names
 
 
+@pytest.mark.anyio
+async def test_call_tools_end_to_end(tmp_path):
+    """Drive a realistic sequence: add two nodes, add edge, query, find_variants."""
+    import json
+
+    db = tmp_path / "lore.db"
+    server = build_server(db)
+
+    async def call(name: str, args: dict) -> dict | list:
+        result = await server.call_tool(name, args)
+        # FastMCP returns (content_list, structured) — structured is the dict/list
+        if isinstance(result, tuple):
+            content, structured = result
+        else:
+            content, structured = result, None
+        if structured is not None:
+            # FastMCP wraps list/scalar returns as {"result": ...}
+            if isinstance(structured, dict) and set(structured.keys()) == {"result"}:
+                return structured["result"]
+            return structured
+        # Fall back to parsing the first text block
+        for block in content:
+            text = getattr(block, "text", None)
+            if text:
+                return json.loads(text)
+        raise AssertionError(f"No content from tool {name}")
+
+    cap = await call(
+        "lore_add_node",
+        {"id": "pay-cap", "type": "capability", "title": "Pay capability"},
+    )
+    assert cap["id"] == "pay-cap"
+
+    await call(
+        "lore_add_node",
+        {"id": "pay-flow", "type": "flow", "title": "Pay flow"},
+    )
+    await call(
+        "lore_add_edge",
+        {"from_id": "pay-flow", "to_id": "pay-cap", "relation": "implements"},
+    )
+
+    got = await call("lore_get_node", {"id": "pay-flow", "include_edges": True})
+    assert got["node"]["id"] == "pay-flow"
+    assert any(e["to_id"] == "pay-cap" for e in got["outgoing"])
+
+    variants = await call("lore_find_variants", {"capability_id": "pay-cap"})
+    assert any(v["id"] == "pay-flow" for v in variants)
+
+
+@pytest.mark.anyio
+async def test_schema_violation_surfaces_as_error(tmp_path):
+    """Calling lore_add_edge with incompatible types should error, not silently
+    succeed."""
+    db = tmp_path / "lore.db"
+    server = build_server(db)
+
+    # Add two nodes whose types can't connect via `implements`
+    await server.call_tool(
+        "lore_add_node",
+        {"id": "m", "type": "module", "title": "M"},
+    )
+    await server.call_tool(
+        "lore_add_node",
+        {"id": "r", "type": "rule", "title": "R"},
+    )
+    with pytest.raises(Exception) as exc_info:
+        await server.call_tool(
+            "lore_add_edge",
+            {"from_id": "m", "to_id": "r", "relation": "implements"},
+        )
+    assert "not allowed" in str(exc_info.value).lower() or "schema" in str(
+        exc_info.value
+    ).lower()
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
