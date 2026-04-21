@@ -74,6 +74,30 @@ English kebab-case regardless.
 If `.lore/config.json` exists and has a `language` key, follow it.
 Otherwise follow the conversation language.
 
+## Model routing — delegate reads to Haiku
+
+Use the caller's model for decisions and writes. Delegate broad read-only
+exploration to the cheaper `lore-explorer` sub-agent (Haiku):
+
+| Situation | How |
+|---|---|
+| Single node lookup, 1-2 tool calls | Stay in caller's model |
+| Scanning >20 nodes, deep traversal, multi-hop audit | `Agent(subagent_type: "lore-explorer", prompt: "<question>")` |
+| Bootstrap / repo scan | Already handled by `/lore:bootstrap` (Haiku) |
+| Detecting contradictions, choosing relations, modelling new nodes | Caller's model — requires reasoning |
+| Any write (`lore_add_*`, `lore_update_*`, `lore_delete_*`) | **Caller's model only.** Never let a Haiku sub-agent write |
+
+If `.lore/config.json` has `models.exploration`, honor it when picking the
+sub-agent model; otherwise default to `haiku`. Example config:
+
+```json
+{ "language": "es", "models": { "exploration": "haiku", "write": "sonnet" } }
+```
+
+Rule of thumb: **Haiku reads, Sonnet/Opus decides what to write.** When a
+sub-agent's finding must become a node/edge, have it return JSON and
+persist from the caller after review.
+
 ## Id conventions
 
 - Kebab-case only: lowercase letters, digits, single hyphens (e.g. `payment-by-transfer`).

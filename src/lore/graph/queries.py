@@ -34,9 +34,15 @@ def list_nodes(
     if status is not None:
         clauses.append("status = ?")
         values.append(status)
+    if tag is not None:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM json_each("
+            "json_extract(metadata_json, '$.tags')) WHERE value = ?)"
+        )
+        values.append(tag)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
-    if summary_only and tag is None:
+    if summary_only:
         rows = conn.execute(
             f"SELECT id, type, title, status FROM nodes {where} ORDER BY type, id",
             values,
@@ -46,14 +52,7 @@ def list_nodes(
     rows = conn.execute(
         f"SELECT * FROM nodes {where} ORDER BY type, id", values
     ).fetchall()
-    nodes = [row_to_dict(r) for r in rows]
-    if tag is not None:
-        nodes = [n for n in nodes if tag in n.get("metadata", {}).get("tags", [])]
-    if summary_only:
-        nodes = [
-            {k: n[k] for k in ("id", "type", "title", "status")} for n in nodes
-        ]
-    return nodes
+    return [row_to_dict(r) for r in rows]
 
 
 def query(
@@ -80,24 +79,25 @@ def query(
     for _ in range(max(depth, 0)):
         if not frontier:
             break
-        ph = _ph(len(frontier))
+        ph_f = _ph(len(frontier))
+        seen_list = list(seen_ids)
+        ph_s = _ph(len(seen_list))
         rows = conn.execute(
             f"""
             SELECT * FROM nodes WHERE id IN (
-                SELECT to_id FROM edges WHERE from_id IN ({ph})
+                SELECT to_id FROM edges WHERE from_id IN ({ph_f})
                 UNION
-                SELECT from_id FROM edges WHERE to_id IN ({ph})
-            )
+                SELECT from_id FROM edges WHERE to_id IN ({ph_f})
+            ) AND id NOT IN ({ph_s})
             """,
-            frontier + frontier,
+            frontier + frontier + seen_list,
         ).fetchall()
         next_frontier: list[str] = []
         for r in rows:
             node = row_to_dict(r)
-            if node["id"] not in seen_ids:
-                seen_ids.add(node["id"])
-                all_nodes[node["id"]] = node
-                next_frontier.append(node["id"])
+            seen_ids.add(node["id"])
+            all_nodes[node["id"]] = node
+            next_frontier.append(node["id"])
         frontier = next_frontier
 
     edges = _edges_within(conn, seen_ids)
@@ -118,14 +118,18 @@ def _resolve_query(conn: sqlite3.Connection, text: str) -> list[dict[str, Any]]:
     ).fetchall()
     if rows:
         return [row_to_dict(r) for r in rows]
-    # Tag fallback
-    all_nodes = conn.execute("SELECT * FROM nodes").fetchall()
-    matches: list[dict[str, Any]] = []
-    for r in all_nodes:
-        node = row_to_dict(r)
-        if text in node.get("metadata", {}).get("tags", []):
-            matches.append(node)
-    return matches
+    rows = conn.execute(
+        """
+        SELECT * FROM nodes
+        WHERE EXISTS (
+            SELECT 1 FROM json_each(json_extract(metadata_json, '$.tags'))
+            WHERE value = ?
+        )
+        ORDER BY type, id
+        """,
+        (text,),
+    ).fetchall()
+    return [row_to_dict(r) for r in rows]
 
 
 def _edges_within(
@@ -175,17 +179,22 @@ def traverse(
             params.extend(relations)
         edge_rows = conn.execute(edge_sql, params).fetchall()
 
-        next_frontier: list[str] = []
+        new_ids: list[str] = []
         for e in edge_rows:
             edge = row_to_dict(e)
             collected_edges.append(edge)
             if edge["to_id"] not in seen_ids:
                 seen_ids.add(edge["to_id"])
-                node = get_node(conn, edge["to_id"])
-                if node:
-                    all_nodes[edge["to_id"]] = node
-                    next_frontier.append(edge["to_id"])
-        frontier = next_frontier
+                new_ids.append(edge["to_id"])
+        if new_ids:
+            node_rows = conn.execute(
+                f"SELECT * FROM nodes WHERE id IN ({_ph(len(new_ids))})",
+                new_ids,
+            ).fetchall()
+            for r in node_rows:
+                n = row_to_dict(r)
+                all_nodes[n["id"]] = n
+        frontier = new_ids
 
     return {
         "nodes": sorted(all_nodes.values(), key=lambda n: (n["type"], n["id"])),

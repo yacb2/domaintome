@@ -2,6 +2,7 @@
 description: Show full detail of a Lore node — fields, incoming and outgoing edges, neighborhood.
 argument-hint: <node-id>
 allowed-tools: [Bash]
+model: haiku
 ---
 
 Call `lore_get_node(id="$ARGUMENTS", include_edges=True)` and render:

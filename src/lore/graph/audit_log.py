@@ -8,6 +8,7 @@ without depending on external observability.
 from __future__ import annotations
 
 import sqlite3
+import sys
 from typing import Any
 
 from lore.graph._common import now_iso
@@ -35,8 +36,8 @@ def log_call(
             (now_iso(), tool, op, node_id, input_bytes, output_bytes, error),
         )
         conn.commit()
-    except sqlite3.Error:
-        pass
+    except sqlite3.Error as exc:
+        print(f"lore: audit_log write failed: {exc}", file=sys.stderr)
 
 
 def stats(

@@ -1,6 +1,7 @@
 ---
 description: Show Lore nodes updated most recently. Use after a session to see what the graph captured.
 allowed-tools: [Bash]
+model: haiku
 ---
 
 Lore does not yet have a dedicated "recent" MCP tool. Fall back to the CLI:
