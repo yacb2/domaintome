@@ -1,0 +1,119 @@
+"""CRUD operations for graph nodes."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import UTC, datetime
+from typing import Any
+
+from lore.graph.schema import (
+    SchemaError,
+    validate_id,
+    validate_node_type,
+    validate_status,
+)
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    d = dict(row)
+    meta = d.pop("metadata_json", None)
+    d["metadata"] = json.loads(meta) if meta else {}
+    return d
+
+
+def add_node(
+    conn: sqlite3.Connection,
+    *,
+    node_id: str,
+    type: str,
+    title: str,
+    body: str | None = None,
+    status: str = "active",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Insert a new node. Raises SchemaError on validation failure or
+    sqlite3.IntegrityError if the id already exists."""
+    validate_id(node_id)
+    validate_node_type(type)
+    validate_status(status)
+    if not title or not title.strip():
+        raise SchemaError("title is required and cannot be empty")
+
+    now = _now()
+    meta_json = json.dumps(metadata) if metadata else None
+    conn.execute(
+        """
+        INSERT INTO nodes (id, type, title, body, status, metadata_json,
+                           created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (node_id, type, title, body, status, meta_json, now, now),
+    )
+    conn.commit()
+    return get_node(conn, node_id)  # type: ignore[return-value]
+
+
+def update_node(
+    conn: sqlite3.Connection,
+    node_id: str,
+    *,
+    title: str | None = None,
+    body: str | None = None,
+    status: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Update mutable fields on an existing node. Pass only the fields to change.
+    Passing `metadata` replaces the entire metadata dict."""
+    existing = get_node(conn, node_id)
+    if existing is None:
+        raise SchemaError(f"Node {node_id!r} not found")
+
+    fields: list[str] = []
+    values: list[Any] = []
+    if title is not None:
+        if not title.strip():
+            raise SchemaError("title cannot be empty")
+        fields.append("title = ?")
+        values.append(title)
+    if body is not None:
+        fields.append("body = ?")
+        values.append(body)
+    if status is not None:
+        validate_status(status)
+        fields.append("status = ?")
+        values.append(status)
+    if metadata is not None:
+        fields.append("metadata_json = ?")
+        values.append(json.dumps(metadata) if metadata else None)
+
+    if not fields:
+        return existing
+
+    fields.append("updated_at = ?")
+    values.append(_now())
+    values.append(node_id)
+    conn.execute(
+        f"UPDATE nodes SET {', '.join(fields)} WHERE id = ?",
+        values,
+    )
+    conn.commit()
+    return get_node(conn, node_id)  # type: ignore[return-value]
+
+
+def delete_node(conn: sqlite3.Connection, node_id: str) -> bool:
+    """Delete a node and all its edges (via FK cascade). Returns True if a row
+    was deleted."""
+    cur = conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def get_node(conn: sqlite3.Connection, node_id: str) -> dict[str, Any] | None:
+    """Fetch a node by id. Returns None if not found."""
+    row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
+    return _row_to_dict(row) if row else None
