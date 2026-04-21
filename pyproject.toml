@@ -1,0 +1,57 @@
+[project]
+name = "projectlore"
+version = "0.0.1"
+description = "The living knowledge graph for your software project — a programmatic MCP-backed graph of business logic, flows, events and rules."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Yoel Acevedo" },
+]
+requires-python = ">=3.11"
+keywords = ["knowledge-graph", "mcp", "llm", "ai", "developer-tools", "documentation"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Documentation",
+]
+dependencies = [
+    "typer>=0.12",
+    "mcp>=1.0",
+]
+
+[project.scripts]
+lore = "lore.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/yoelacevedo/lore"
+Repository = "https://github.com/yoelacevedo/lore"
+Issues = "https://github.com/yoelacevedo/lore/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lore"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
