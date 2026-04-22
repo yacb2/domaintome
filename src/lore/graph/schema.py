@@ -86,7 +86,9 @@ GENERIC_ID_WORDS: frozenset[str] = frozenset(
     }
 )
 
-NODE_STATUSES: frozenset[str] = frozenset({"active", "deprecated", "superseded"})
+NODE_STATUSES: frozenset[str] = frozenset(
+    {"active", "draft", "deprecated", "superseded", "archived"}
+)
 
 
 class SchemaError(ValueError):

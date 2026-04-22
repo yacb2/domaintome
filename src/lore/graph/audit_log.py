@@ -40,6 +40,23 @@ def log_call(
         print(f"lore: audit_log write failed: {exc}", file=sys.stderr)
 
 
+def history(
+    conn: sqlite3.Connection, node_id: str, *, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Return audit_log events for a given node id, newest first."""
+    rows = conn.execute(
+        """
+        SELECT timestamp, tool, op, input_bytes, output_bytes, error
+        FROM audit_log
+        WHERE node_id = ?
+        ORDER BY timestamp DESC, id DESC
+        LIMIT ?
+        """,
+        (node_id, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def stats(
     conn: sqlite3.Connection,
     *,

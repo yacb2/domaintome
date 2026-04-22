@@ -58,6 +58,8 @@ Bootstrap Lore on a larger project using an economical scan:
      - `source: "inferred_from_code"`
      - `confidence: "medium"` (bootstrap inferences are never `high`)
      - `source_context: "bootstrap scan <date>"`
+     - `source_ref: "<path[:line]>"` when the node maps to a concrete file
+     - `last_verified_at: "<today ISO>"`
 
 5. **Run `lore_audit()`** and report any findings.
 

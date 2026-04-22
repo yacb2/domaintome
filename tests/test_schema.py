@@ -27,12 +27,12 @@ class TestNodeTypes:
 
 class TestStatus:
     def test_valid_statuses(self):
-        for s in ("active", "deprecated", "superseded"):
+        for s in ("active", "draft", "deprecated", "superseded", "archived"):
             validate_status(s)
 
     def test_invalid_status(self):
         with pytest.raises(SchemaError):
-            validate_status("archived")
+            validate_status("frozen")
 
 
 class TestRelation:
