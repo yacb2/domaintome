@@ -12,6 +12,7 @@ from lore.export import export_markdown as _export_markdown
 from lore.graph import (
     audit as _audit,
 )
+from lore.graph.queries import FINDING_KEYS
 from lore.graph import (
     find_variants as _find_variants,
 )
@@ -41,6 +42,21 @@ DBOption = Annotated[
 ]
 
 
+def _require_db(db: Path) -> None:
+    """Exit with a clear error if the DB file does not exist.
+
+    Prevents read-only commands from silently creating a fresh DB at the
+    given path — which would both surprise the user and give false-negative
+    "empty graph" results.
+    """
+    if not db.exists():
+        typer.echo(
+            f"No Lore database at {db}. Run `lore init --db {db}` to create one.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def init(db: DBOption = DEFAULT_DB) -> None:
     """Create an empty Lore database at the given path."""
@@ -59,6 +75,7 @@ def list_cmd(
     tag: Annotated[str | None, typer.Option(help="Filter by metadata tag.")] = None,
 ) -> None:
     """List nodes in the graph."""
+    _require_db(db)
     conn = open_db(db)
     nodes = list_nodes(conn, type=type, status=status, tag=tag)
     if not nodes:
@@ -74,6 +91,7 @@ def show(
     db: DBOption = DEFAULT_DB,
 ) -> None:
     """Show a single node and its direct relationships."""
+    _require_db(db)
     conn = open_db(db)
     node = get_node(conn, node_id)
     if node is None:
@@ -106,6 +124,7 @@ def query_cmd(
     depth: Annotated[int, typer.Option(help="Neighborhood depth.")] = 1,
 ) -> None:
     """Flexible search: exact id, title substring, or tag."""
+    _require_db(db)
     conn = open_db(db)
     result = query(conn, text, depth=depth)
     if not result["nodes"]:
@@ -126,6 +145,7 @@ def variants(
     db: DBOption = DEFAULT_DB,
 ) -> None:
     """List all flows that implement the given capability."""
+    _require_db(db)
     conn = open_db(db)
     results = _find_variants(conn, capability_id)
     if not results:
@@ -136,19 +156,48 @@ def variants(
 
 
 @app.command()
-def audit(db: DBOption = DEFAULT_DB) -> None:
-    """Structural checks: orphans, dangling edges, id hygiene, cycles."""
+def audit(
+    db: DBOption = DEFAULT_DB,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the full report as JSON."),
+    ] = False,
+) -> None:
+    """Structural checks + graph summary: counts, orphans, cycles, id hygiene."""
+    _require_db(db)
     conn = open_db(db)
     report = _audit(conn)
+
+    if json_output:
+        typer.echo(json.dumps(report, indent=2, sort_keys=True))
+        return
+
+    typer.echo(
+        f"-- summary --\n"
+        f"  nodes: {report['nodes_total']}  "
+        f"edges: {report['edges_total']}  "
+        f"last_mutation: {report['last_mutation_at'] or '-'}"
+    )
+    if report["nodes_by_type"]:
+        parts = ", ".join(f"{k}={v}" for k, v in report["nodes_by_type"].items())
+        typer.echo(f"  by type:     {parts}")
+    if report["nodes_by_status"]:
+        parts = ", ".join(f"{k}={v}" for k, v in report["nodes_by_status"].items())
+        typer.echo(f"  by status:   {parts}")
+    if report["edges_by_relation"]:
+        parts = ", ".join(f"{k}={v}" for k, v in report["edges_by_relation"].items())
+        typer.echo(f"  by relation: {parts}")
+
     any_finding = False
-    for key, items in report.items():
+    for key in FINDING_KEYS:
+        items = report.get(key) or []
         if items:
             any_finding = True
             typer.echo(f"\n-- {key} ({len(items)}) --")
             for it in items:
                 typer.echo(f"  {it}")
     if not any_finding:
-        typer.echo("OK — no findings")
+        typer.echo("\nOK — no findings")
 
 
 @app.command()
@@ -159,6 +208,7 @@ def export(
     db: DBOption = DEFAULT_DB,
 ) -> None:
     """Export the graph as one markdown file per node."""
+    _require_db(db)
     conn = open_db(db)
     written = _export_markdown(conn, out)
     typer.echo(f"Wrote {len(written)} files under {out}")
@@ -197,6 +247,7 @@ def stats(
     rate. Token count is not directly measurable from the MCP server, so
     `bytes_exchanged` is the honest proxy — multiply by ~0.3 for a rough
     token estimate."""
+    _require_db(db)
     conn = open_db(db)
     data = _stats(conn, since=since)
     if data["calls"] == 0:

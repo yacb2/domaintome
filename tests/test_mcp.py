@@ -9,6 +9,17 @@ from __future__ import annotations
 import pytest
 
 from lore.mcp import build_server
+from lore.mcp.server import run as mcp_run
+
+
+def test_mcp_run_refuses_missing_db(tmp_path, capsys):
+    missing = tmp_path / "nope" / "lore.db"
+    with pytest.raises(SystemExit) as exc:
+        mcp_run(missing)
+    assert exc.value.code == 1
+    assert not missing.exists(), "run() must not create the DB"
+    err = capsys.readouterr().err
+    assert "no database at" in err
 
 
 @pytest.mark.anyio

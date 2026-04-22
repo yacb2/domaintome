@@ -1,9 +1,11 @@
 ---
-description: Auto-discover this project's modules, capabilities and flows by scanning the repo with a cheap model, then propose a seed graph for the user to approve. Ideal for onboarding a large existing codebase.
+description: Auto-discover this project's modules, capabilities and flows by scanning the code with a cheap model, then propose a seed graph for the user to approve. Ideal for onboarding a large existing codebase.
 allowed-tools: [Bash, Read, Glob, Grep, Agent]
 ---
 
-Bootstrap Lore on a larger project using an economical scan:
+Bootstrap Lore on a larger project using an economical scan. The project
+may be a single repo **or** a workspace containing several repos/packages
+— the scan handles both layouts.
 
 1. **Ensure the DB exists.** If `.lore/lore.db` does not exist, run
    `lore init` first.
@@ -17,28 +19,43 @@ Bootstrap Lore on a larger project using an economical scan:
    - `prompt`: (use the template below, adapted to the current project)
 
    ```
-   Scan this repository and produce a compact proposal for a Lore seed
-   graph. Do NOT write to Lore — only return a JSON proposal for the
-   caller to review.
+   Scan this directory and produce a compact proposal for a Lore seed
+   graph. The directory may be a single repo OR a workspace that holds
+   multiple repos/packages side by side. Handle both. Do NOT write to
+   Lore — only return a JSON proposal for the caller to review.
 
    Steps:
-   1. Identify the app name from package.json, pyproject.toml, Cargo.toml,
-      go.mod, or README.md. Also capture the primary repository URL if
-      present.
-   2. List the top-level source directories that look like business
-      modules (src/*/, lib/*/, apps/*/, services/*/). Ignore tests,
-      scripts, build output, vendor dirs.
-   3. For each module, skim file names and a handful of file headers to
+   1. Detect layout:
+      - **Single repo**: one `package.json` / `pyproject.toml` / `go.mod` /
+        `Cargo.toml` at the root, a single `src/` or equivalent.
+      - **Workspace**: no manifest at the root, or multiple child dirs that
+        each contain their own manifest (`*/package.json`, `*/pyproject.toml`,
+        `*/.git/`). Common markers: `*_ws/`, `apps/`, `packages/`,
+        `services/`, or sibling folders like `backend/` + `frontend/`.
+      When in doubt, treat sibling dirs with their own manifest as separate
+      modules.
+   2. Identify the app/workspace name from the top-level manifest or
+      README. Capture the primary repository URL if present (may be
+      one-per-module in a workspace).
+   3. List the source directories that look like business modules:
+      - Single repo: `src/*/`, `lib/*/`, `apps/*/`, `services/*/`.
+      - Workspace: each child dir that has its own manifest or `.git/` is a
+        module. Go one level deeper for their internal sub-modules only if
+        they are clearly business-relevant (not `utils/`, `config/`).
+      Ignore tests, scripts, build output, vendor dirs, `_shared/`,
+      `_scratch/`.
+   4. For each module, skim file names and a handful of file headers to
       guess 1-3 candidate capabilities (what the module does, not how).
-   4. Identify obvious flows: CLI subcommands, HTTP route handlers, event
+   5. Identify obvious flows: CLI subcommands, HTTP route handlers, event
       consumers, queue workers. Capture entry-point file + function name.
 
    Return a single JSON object (no prose) with this shape:
    {
+     "layout": "single_repo" | "workspace",
      "app_name": "...",
      "repository": "...",
      "language": "<primary natural language of docs/comments, e.g. 'en' or 'es'>",
-     "modules": [{"id": "module-<slug>", "title": "...", "path": "..."}],
+     "modules": [{"id": "module-<slug>", "title": "...", "path": "...", "repo": "<repo-path-if-workspace>"}],
      "capabilities": [{"id": "capability-<slug>", "title": "...", "module_id": "module-<slug>"}],
      "flows": [{"id": "flow-<slug>", "title": "...", "module_id": "module-<slug>", "entry_point": "path:function"}]
    }
