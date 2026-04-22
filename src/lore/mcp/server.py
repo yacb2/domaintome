@@ -9,30 +9,66 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from lore.export import export_markdown as _export_markdown
 from lore.graph import (
     add_edge as _add_edge,
+)
+from lore.graph import (
     add_edges_batch as _add_edges_batch,
+)
+from lore.graph import (
     add_node as _add_node,
+)
+from lore.graph import (
     add_nodes_batch as _add_nodes_batch,
+)
+from lore.graph import (
     audit as _audit,
+)
+from lore.graph import (
     delete_node as _delete_node,
+)
+from lore.graph import (
     find_variants as _find_variants,
+)
+from lore.graph import (
     get_node as _get_node,
+)
+from lore.graph import (
+    history as _history,
+)
+from lore.graph import (
     list_edges as _list_edges,
+)
+from lore.graph import (
     list_nodes as _list_nodes,
+)
+from lore.graph import (
     log_call as _log_call,
+)
+from lore.graph import (
     open_db,
+)
+from lore.graph import (
     query as _query,
+)
+from lore.graph import (
     remove_edge as _remove_edge,
+)
+from lore.graph import (
     stats as _stats,
+)
+from lore.graph import (
     traverse as _traverse,
+)
+from lore.graph import (
     update_node as _update_node,
 )
 
@@ -130,10 +166,14 @@ def build_server(db_path: str | Path) -> FastMCP:
         body: str | None = None,
         status: str | None = None,
         metadata: dict[str, Any] | None = None,
+        metadata_patch: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Update fields on an existing node. Pass only fields that changed.
-        Passing `metadata` replaces the entire metadata dict — preserve
-        provenance keys (`source`, `confidence`) when updating."""
+
+        Use `metadata_patch` to merge keys into existing metadata (preferred —
+        preserves provenance). Pass `null` as a value to remove a key. Use
+        `metadata` only for full replacement (rare). Cannot combine both.
+        Status values: active, draft, deprecated, superseded, archived."""
         return _update_node(
             conn,
             id,
@@ -141,13 +181,23 @@ def build_server(db_path: str | Path) -> FastMCP:
             body=body,
             status=status,
             metadata=metadata,
+            metadata_patch=metadata_patch,
         )
 
     @mcp.tool()
     @_instrumented(conn, "lore_delete_node", "delete")
-    def lore_delete_node(id: str) -> dict[str, bool]:
-        """Delete a node and all its edges."""
-        return {"deleted": _delete_node(conn, id)}
+    def lore_delete_node(id: str) -> dict[str, Any]:
+        """Hard-delete a node and all its edges. **Destroys history** —
+        prefer `lore_update_node(status="deprecated" | "archived")` for
+        concepts that still matter. Returns `{deleted, edges_lost,
+        warning}`; a non-empty `warning` appears when edges were dropped."""
+        result = _delete_node(conn, id)
+        if result["deleted"] and result["edges_lost"] > 0:
+            result["warning"] = (
+                f"{result['edges_lost']} edges destroyed. History of this "
+                f"node is gone. Consider soft-delete next time."
+            )
+        return result
 
     @mcp.tool()
     @_instrumented(conn, "lore_get_node", "read")
@@ -254,6 +304,14 @@ def build_server(db_path: str | Path) -> FastMCP:
     def lore_audit() -> dict[str, Any]:
         """Run structural checks: orphans, dangling edges, id hygiene, cycles."""
         return _audit(conn)
+
+    @mcp.tool()
+    @_instrumented(conn, "lore_history", "read")
+    def lore_history(id: str, limit: int = 100) -> list[dict[str, Any]]:
+        """Return the change history for a node from the append-only audit
+        log: every MCP call touching this id, newest first. Use to answer
+        'what happened to this node?' or 'when was it deprecated?'."""
+        return _history(conn, id, limit=limit)
 
     @mcp.tool()
     @_instrumented(conn, "lore_stats", "read")

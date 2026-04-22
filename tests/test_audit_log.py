@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from lore.graph import log_call, stats
+from lore.graph import history, log_call, stats
 
 
 def test_log_call_appends_row(conn):
@@ -47,3 +47,17 @@ def test_stats_aggregates(conn):
 
     ops = {r["op"]: r["calls"] for r in data["by_op"]}
     assert ops == {"create": 2, "read": 2}
+
+
+def test_history_filters_by_node(conn):
+    log_call(conn, tool="lore_add_node", op="create", node_id="foo",
+             input_bytes=10, output_bytes=20)
+    log_call(conn, tool="lore_update_node", op="update", node_id="foo",
+             input_bytes=10, output_bytes=20)
+    log_call(conn, tool="lore_add_node", op="create", node_id="bar",
+             input_bytes=10, output_bytes=20)
+
+    events = history(conn, "foo")
+    assert len(events) == 2
+    assert {e["tool"] for e in events} == {"lore_add_node", "lore_update_node"}
+    assert history(conn, "missing") == []

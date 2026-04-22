@@ -55,9 +55,16 @@ def update_node(
     body: str | None = None,
     status: str | None = None,
     metadata: dict[str, Any] | None = None,
+    metadata_patch: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Update mutable fields on an existing node. Pass only the fields to change.
-    Passing `metadata` replaces the entire metadata dict."""
+
+    `metadata` replaces the entire metadata dict (use sparingly — loses
+    provenance). `metadata_patch` merges into the existing dict at the top
+    level; pass `None` as a value to remove a key. Cannot combine both."""
+    if metadata is not None and metadata_patch is not None:
+        raise SchemaError("pass either metadata or metadata_patch, not both")
+
     existing = get_node(conn, node_id)
     if existing is None:
         raise SchemaError(f"Node {node_id!r} not found")
@@ -79,6 +86,15 @@ def update_node(
     if metadata is not None:
         fields.append("metadata_json = ?")
         values.append(json.dumps(metadata) if metadata else None)
+    elif metadata_patch is not None:
+        merged = dict(existing.get("metadata") or {})
+        for k, v in metadata_patch.items():
+            if v is None:
+                merged.pop(k, None)
+            else:
+                merged[k] = v
+        fields.append("metadata_json = ?")
+        values.append(json.dumps(merged) if merged else None)
 
     if not fields:
         return existing
@@ -94,12 +110,19 @@ def update_node(
     return get_node(conn, node_id)  # type: ignore[return-value]
 
 
-def delete_node(conn: sqlite3.Connection, node_id: str) -> bool:
-    """Delete a node and all its edges (via FK cascade). Returns True if a row
-    was deleted."""
+def delete_node(conn: sqlite3.Connection, node_id: str) -> dict[str, Any]:
+    """Hard-delete a node and all its edges (via FK cascade).
+
+    Returns `{"deleted": bool, "edges_lost": int}`. Prefer soft-delete
+    (`update_node(status="deprecated" | "archived")`) to preserve history —
+    this operation is irreversible."""
+    edges_lost = conn.execute(
+        "SELECT COUNT(*) FROM edges WHERE from_id = ? OR to_id = ?",
+        (node_id, node_id),
+    ).fetchone()[0]
     cur = conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
     conn.commit()
-    return cur.rowcount > 0
+    return {"deleted": cur.rowcount > 0, "edges_lost": edges_lost}
 
 
 def get_node(conn: sqlite3.Connection, node_id: str) -> dict[str, Any] | None:

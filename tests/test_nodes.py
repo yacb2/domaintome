@@ -69,11 +69,58 @@ def test_update_metadata_replaces(conn):
     assert updated["metadata"] == {"tags": ["b"], "owner": "ayoel"}
 
 
+def test_metadata_patch_merges_and_preserves(conn):
+    add_node(
+        conn,
+        node_id="x",
+        type="flow",
+        title="X",
+        metadata={"source": "user_stated", "confidence": "high", "tags": ["a"]},
+    )
+    updated = update_node(
+        conn, "x", metadata_patch={"confidence": "medium", "owner": "ayoel"}
+    )
+    assert updated["metadata"] == {
+        "source": "user_stated",
+        "confidence": "medium",
+        "tags": ["a"],
+        "owner": "ayoel",
+    }
+
+
+def test_metadata_patch_removes_key_when_value_is_none(conn):
+    add_node(conn, node_id="x", type="flow", title="X",
+             metadata={"source": "user_stated", "note": "drop me"})
+    updated = update_node(conn, "x", metadata_patch={"note": None})
+    assert updated["metadata"] == {"source": "user_stated"}
+
+
+def test_metadata_and_patch_are_mutually_exclusive(conn):
+    add_node(conn, node_id="x", type="flow", title="X")
+    with pytest.raises(SchemaError):
+        update_node(conn, "x", metadata={"a": 1}, metadata_patch={"b": 2})
+
+
+def test_new_statuses_accepted(conn):
+    add_node(conn, node_id="x", type="flow", title="X")
+    for s in ("draft", "archived", "deprecated", "superseded", "active"):
+        update_node(conn, "x", status=s)
+
+
 def test_delete_node(conn):
     add_node(conn, node_id="x", type="flow", title="X")
-    assert delete_node(conn, "x") is True
+    result = delete_node(conn, "x")
+    assert result == {"deleted": True, "edges_lost": 0}
     assert get_node(conn, "x") is None
-    assert delete_node(conn, "x") is False
+    assert delete_node(conn, "x") == {"deleted": False, "edges_lost": 0}
+
+
+def test_delete_node_reports_lost_edges(conn):
+    add_node(conn, node_id="a", type="module", title="A")
+    add_node(conn, node_id="b", type="module", title="B")
+    from lore.graph import add_edge
+    add_edge(conn, from_id="a", to_id="b", relation="depends_on")
+    assert delete_node(conn, "a") == {"deleted": True, "edges_lost": 1}
 
 
 def test_get_missing_returns_none(conn):

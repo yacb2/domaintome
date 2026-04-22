@@ -1,6 +1,6 @@
 """Lore graph engine — SQLite-backed typed graph of nodes and edges."""
 
-from lore.graph.audit_log import log_call, stats
+from lore.graph.audit_log import history, log_call, stats
 from lore.graph.db import connect, init_db, open_db
 from lore.graph.edges import add_edge, add_edges_batch, list_edges, remove_edge
 from lore.graph.nodes import (
@@ -33,6 +33,7 @@ __all__ = [
     "delete_node",
     "find_variants",
     "get_node",
+    "history",
     "init_db",
     "is_relation_allowed",
     "list_edges",

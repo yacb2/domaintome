@@ -49,20 +49,68 @@ surface new warnings.
 
 ## Provenance — always set metadata
 
-Every node and edge you create must carry provenance in `metadata` so the
-user can later audit what was inferred vs. stated. Keys:
+Every node you create must carry provenance in `metadata` so the user can
+later audit what was inferred vs. stated. Standard keys:
 
-- `source` — one of:
-  - `user_stated` — the user explicitly affirmed it in this conversation.
-  - `user_confirmed` — you proposed it and the user said "yes, save that".
-  - `inferred_from_code` — you deduced it by reading source files.
-  - `inferred_from_conversation` — you deduced it from context without an
-    explicit confirmation. **Use sparingly — prefer asking first.**
-- `confidence` — `high` | `medium` | `low`.
-- `source_context` — one-line free text: e.g. `"conversation 2026-04-21: capabilities discussion"` or `"read from src/foo/bar.py"`.
+| Key | Values / format | When |
+|---|---|---|
+| `source` | `user_stated` \| `user_confirmed` \| `inferred_from_code` \| `inferred_from_conversation` | Always |
+| `confidence` | `high` \| `medium` \| `low` | Always |
+| `source_context` | one-line free text, e.g. `"conversation 2026-04-22"` or `"read src/foo/bar.py:42"` | Always |
+| `source_ref` | `path:line` of the code it represents | When tracking a concrete code artifact |
+| `last_verified_at` | ISO date, e.g. `"2026-04-22"` | After a human "yes, still correct" |
+| `deprecated_at` | ISO date | When marking a node deprecated |
+| `deprecated_reason` | one-line free text | When marking a node deprecated |
+| `replaced_by` | id of the successor node | When superseded |
 
-When `lore_update_node` replaces metadata, **preserve these keys** — copy
-them from the existing node first, then merge.
+`inferred_from_conversation` is allowed but **prefer asking first** before
+persisting inferences.
+
+## Updating metadata without losing provenance
+
+`lore_update_node(metadata=…)` **replaces** the whole dict (destroys
+provenance). **Prefer `metadata_patch`**: it merges at the top level, and
+passing `null` as a value removes a key.
+
+```
+lore_update_node(id="flow-x", metadata_patch={"confidence": "low",
+                                              "last_verified_at": "2026-04-22"})
+```
+
+## Lifecycle & soft-delete
+
+Valid statuses: `active | draft | deprecated | superseded | archived`.
+
+| Situation | Do |
+|---|---|
+| In-progress, not yet real | `status="draft"` |
+| Still exists in code, still correct | `status="active"` |
+| No longer used, historical record kept | `status="deprecated"` + `metadata_patch.deprecated_at` + `deprecated_reason` |
+| Replaced by another node | `status="superseded"` + `supersedes` edge from successor + `metadata_patch.replaced_by` |
+| Frozen but worth remembering (old version, prior product) | `status="archived"` |
+| Typo / mistake only | `lore_delete_node` — the only legitimate hard delete |
+
+**Never call `lore_delete_node` for a concept that existed.** Hard delete
+cascades and destroys edges; the MCP reply includes an `edges_lost`
+warning. Soft-delete preserves the graph's history.
+
+## Renaming / moving a node
+
+The graph treats ids as permanent. To "rename" `flow-checkout` →
+`flow-order-placement`:
+
+1. `lore_add_node(id="flow-order-placement", ...)` with full provenance.
+2. `lore_add_edge(from="flow-order-placement", to="flow-checkout", relation="supersedes")`.
+3. `lore_update_node("flow-checkout", status="superseded",
+                     metadata_patch={"deprecated_at": "<today>",
+                                     "replaced_by": "flow-order-placement"})`.
+4. Re-attach any `part_of` / `implements` edges from the old id to the new one.
+
+## Inspecting history
+
+`lore_history(id)` returns the append-only MCP event log for a node
+(newest first). Use it to answer "when was this deprecated?" or "what
+changed and when?".
 
 ## Language of the content
 
