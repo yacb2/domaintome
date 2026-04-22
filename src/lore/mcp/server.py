@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
@@ -333,6 +334,21 @@ def build_server(db_path: str | Path) -> FastMCP:
 
 
 def run(db_path: str | Path) -> None:
-    """Run the MCP server over stdio."""
-    mcp = build_server(db_path)
+    """Run the MCP server over stdio.
+
+    Refuses to start if the database file does not exist. Prevents the
+    common footgun where Claude Code is launched from a parent directory
+    and the server silently creates a fresh `.lore/lore.db` at the wrong
+    location, diverging from the real project graph.
+    """
+    resolved = Path(db_path).resolve()
+    if not resolved.exists():
+        sys.stderr.write(
+            f"Lore MCP: no database at {resolved}. "
+            f"Run `lore init --db {resolved}` first, or launch Claude Code "
+            f"from the directory that contains `.lore/lore.db`.\n"
+        )
+        raise SystemExit(1)
+    sys.stderr.write(f"Lore MCP: using database at {resolved}\n")
+    mcp = build_server(resolved)
     mcp.run()

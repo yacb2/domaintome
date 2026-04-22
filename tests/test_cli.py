@@ -91,6 +91,14 @@ def test_audit_clean(tmp_path):
     assert "OK" in result.output
 
 
+def test_read_commands_refuse_missing_db(tmp_path):
+    missing = tmp_path / "nope" / "lore.db"
+    for cmd in (["list"], ["audit"], ["stats"], ["query", "x"]):
+        result = runner.invoke(app, [*cmd, "--db", str(missing)])
+        assert result.exit_code == 1, f"{cmd} should fail on missing DB"
+        assert not missing.exists(), f"{cmd} must not create the DB"
+
+
 def test_export(tmp_path):
     db = tmp_path / "lore.db"
     _seed(db)

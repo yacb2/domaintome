@@ -11,6 +11,19 @@ business knowledge as a typed graph: modules, capabilities, flows, events,
 rules, forms, entities and decisions. Treat Lore as the project's **living
 memory**.
 
+## Scope: where does "the project" live?
+
+Lore has no opinion about whether a project is a single repo or a
+workspace holding several repos/packages. The graph lives in
+`.lore/lore.db` relative to whatever directory Claude Code was launched
+from — that's the "root of analysis". Workspaces with multiple repos
+(split-repo setups, monorepos of independent packages, `*_ws/`
+scaffolding) typically keep `.lore/` at the workspace root so a single
+graph captures cross-repo relations. Single-repo projects keep it at the
+repo root. Both are valid; pick whichever matches the unit of knowledge
+you want to capture. The MCP server logs the resolved DB path on startup
+so you can always verify which one it is using.
+
 ## Read before acting
 
 Before answering "how does X work?" or writing non-trivial code that touches

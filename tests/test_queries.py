@@ -144,3 +144,24 @@ def test_audit_acyclic_graph_has_no_cycles(seeded_conn):
     assert report["cycles_supersedes"] == []
     assert report["cycles_depends_on"] == []
     assert report["cycles_triggers"] == []
+
+
+def test_audit_reports_counts_and_breakdowns(seeded_conn):
+    report = audit(seeded_conn)
+    assert report["nodes_total"] > 0
+    assert report["edges_total"] > 0
+    assert isinstance(report["nodes_by_type"], dict)
+    assert isinstance(report["nodes_by_status"], dict)
+    assert isinstance(report["edges_by_relation"], dict)
+    assert sum(report["nodes_by_type"].values()) == report["nodes_total"]
+    assert sum(report["nodes_by_status"].values()) == report["nodes_total"]
+    assert sum(report["edges_by_relation"].values()) == report["edges_total"]
+    assert report["last_mutation_at"] is not None
+
+
+def test_audit_empty_graph_has_zero_counts(conn):
+    report = audit(conn)
+    assert report["nodes_total"] == 0
+    assert report["edges_total"] == 0
+    assert report["nodes_by_type"] == {}
+    assert report["last_mutation_at"] is None

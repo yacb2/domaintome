@@ -218,24 +218,33 @@ def find_variants(
     return [row_to_dict(r) for r in rows]
 
 
+FINDING_KEYS: tuple[str, ...] = (
+    "orphans",
+    "dangling_edges",
+    "invalid_ids",
+    "generic_ids",
+    "unknown_types",
+    *(f"cycles_{r}" for r in CYCLE_RELATIONS),
+)
+
+
 def audit(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Run structural checks against the graph.
+    """Run structural checks against the graph and summarize counts.
 
-    Returns a dict with lists: `orphans`, `dangling_edges`, `invalid_ids`,
-    `generic_ids`, `unknown_types`, and one `cycles_<relation>` key per
-    entry in :data:`CYCLE_RELATIONS`.
+    Returns a flat dict combining:
+
+    - Finding lists (see :data:`FINDING_KEYS`): `orphans`, `dangling_edges`,
+      `invalid_ids`, `generic_ids`, `unknown_types`, and one
+      `cycles_<relation>` per entry in :data:`CYCLE_RELATIONS`.
+    - Counters for quick at-a-glance health: `nodes_total`, `edges_total`,
+      `nodes_by_type`, `nodes_by_status`, `edges_by_relation`,
+      `last_mutation_at`.
     """
-    findings: dict[str, list[Any]] = {
-        "orphans": [],
-        "dangling_edges": [],
-        "invalid_ids": [],
-        "generic_ids": [],
-        "unknown_types": [],
-    }
-    for rel in CYCLE_RELATIONS:
-        findings[f"cycles_{rel}"] = []
+    findings: dict[str, list[Any]] = {k: [] for k in FINDING_KEYS}
 
-    all_nodes = conn.execute("SELECT id, type FROM nodes").fetchall()
+    all_nodes = conn.execute(
+        "SELECT id, type, status FROM nodes"
+    ).fetchall()
     node_ids = {r["id"] for r in all_nodes}
 
     connected = {
@@ -246,8 +255,12 @@ def audit(conn: sqlite3.Connection) -> dict[str, Any]:
     }
     findings["orphans"] = sorted(node_ids - connected)
 
+    all_edges = conn.execute(
+        "SELECT from_id, to_id, relation FROM edges"
+    ).fetchall()
+
     # FK cascade should prevent this; defensive scan catches legacy rows.
-    for r in conn.execute("SELECT from_id, to_id, relation FROM edges").fetchall():
+    for r in all_edges:
         if r["from_id"] not in node_ids or r["to_id"] not in node_ids:
             findings["dangling_edges"].append(dict(r))
 
@@ -263,7 +276,29 @@ def audit(conn: sqlite3.Connection) -> dict[str, Any]:
     for rel in CYCLE_RELATIONS:
         findings[f"cycles_{rel}"] = _find_cycles(conn, rel)
 
-    return findings
+    by_type: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+    for r in all_nodes:
+        by_type[r["type"]] = by_type.get(r["type"], 0) + 1
+        by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+
+    by_relation: dict[str, int] = {}
+    for r in all_edges:
+        by_relation[r["relation"]] = by_relation.get(r["relation"], 0) + 1
+
+    last_mutation = conn.execute(
+        "SELECT MAX(updated_at) AS t FROM nodes"
+    ).fetchone()
+
+    return {
+        **findings,
+        "nodes_total": len(all_nodes),
+        "edges_total": len(all_edges),
+        "nodes_by_type": dict(sorted(by_type.items())),
+        "nodes_by_status": dict(sorted(by_status.items())),
+        "edges_by_relation": dict(sorted(by_relation.items())),
+        "last_mutation_at": last_mutation["t"] if last_mutation else None,
+    }
 
 
 def _find_cycles(conn: sqlite3.Connection, relation: str) -> list[list[str]]:

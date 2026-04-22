@@ -20,14 +20,14 @@ It answers questions like *"how many ways of registering a payment exist?"*, *"w
 /plugin install lore@lore
 ```
 
-Reload, then in any project run `lore init` (or `/lore:bootstrap` for a guided onboarding that scans the repo with Haiku).
+Reload, then from the project you want to model run `lore init` (or `/lore:bootstrap` for a guided onboarding that scans the code with Haiku). "Project" can be a single repo *or* a workspace that contains several repos — Lore has no opinion, `.lore/lore.db` is created relative to whatever directory you launched Claude Code from.
 
 The plugin bundles:
 
 - **MCP server** exposing `lore_add_node`, `lore_add_nodes`, `lore_update_node`, `lore_delete_node`, `lore_get_node`, `lore_add_edge`, `lore_add_edges`, `lore_remove_edge`, `lore_query`, `lore_traverse`, `lore_list`, `lore_find_variants`, `lore_audit`, `lore_history`, `lore_stats`, `lore_export_markdown`.
 - **Auto-invoked skill** (`lore-usage`) that tells Claude to read before acting and write on decision, with provenance rules and lifecycle conventions.
 - **Sub-agent `lore-explorer`** (Haiku, read-only) for broad exploration without burning expensive tokens.
-- **Slash commands**: `/lore:init`, `/lore:bootstrap`, `/lore:audit`, `/lore:show <id>`, `/lore:recent`, `/lore:impact <id>`.
+- **Slash commands**: `/lore:init`, `/lore:bootstrap`, `/lore:audit`, `/lore:show <id>`, `/lore:recent`, `/lore:impact <id>`, `/lore:probe <path>` (audit another project's graph without switching directory).
 
 ## Install (standalone CLI / other MCP hosts)
 
