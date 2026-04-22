@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.7] — 2026-04-22
+
+### Fixed
+- `tests/test_plugin_structure.py` updated to reflect the flattened
+  `commands/` layout from v0.0.6. Also added `probe.md` to the expected
+  files list so future renames don't silently break it.
+
 ## [0.0.6] — 2026-04-22
 
 ### Fixed

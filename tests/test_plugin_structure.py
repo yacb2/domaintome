@@ -19,7 +19,7 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "lore"
 PLUGIN_MANIFEST = PLUGIN_DIR / ".claude-plugin" / "plugin.json"
 MCP_MANIFEST = PLUGIN_DIR / ".mcp.json"
 SKILLS_DIR = PLUGIN_DIR / "skills"
-COMMANDS_DIR = PLUGIN_DIR / "commands" / "lore"
+COMMANDS_DIR = PLUGIN_DIR / "commands"
 
 
 def _parse_frontmatter(path: Path) -> dict[str, str]:
@@ -112,6 +112,7 @@ def test_expected_plugin_files_present() -> None:
         COMMANDS_DIR / "recent.md",
         COMMANDS_DIR / "impact.md",
         COMMANDS_DIR / "bootstrap.md",
+        COMMANDS_DIR / "probe.md",
     ]
     missing = [str(p.relative_to(REPO_ROOT)) for p in expected if not p.exists()]
     assert not missing, f"plugin files missing: {missing}"
