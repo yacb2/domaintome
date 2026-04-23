@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.8] — 2026-04-23
+
+### Added
+- `lore reconcile` CLI command + `/lore:reconcile` slash command
+  (model: haiku). Detects drift between code and graph without mutating
+  anything: `dead_refs` (source_ref points at a file that no longer
+  exists), `stale` (last_verified_at older than `--stale-days`, default
+  90), `never_verified` (has source_ref but never marked verified).
+  Supports `--since <git-rev>` to restrict the scan to files changed
+  since that rev; falls back to a full scan with a warning when the
+  project is not a git repo. Exits 0 on clean, 1 on drift — ready to
+  be wired into hooks.
+- `src/lore/lifecycle.py` module holding the reconcile engine (8 new
+  tests).
+
+### Fixed
+- `/lore:init` and `/lore:bootstrap` now require a mandatory
+  verification step before claiming success: Claude must call
+  `lore_list` / `lore_audit` after persisting, compare the returned
+  count to the number of items it intended to persist, and report
+  FAILURE on mismatch instead of fabricating a success message. This
+  closes the hallucination failure mode observed during v0.0.4/v0.0.7
+  testing where `/lore:init` claimed to have seeded 7 modules without
+  ever calling `lore_add_nodes`.
+
 ## [0.0.7] — 2026-04-22
 
 ### Fixed
