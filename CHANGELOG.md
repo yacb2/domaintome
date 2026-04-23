@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.10] — 2026-04-23
+
+### Changed
+- **`/lore:bootstrap` now defaults to Sonnet**, not Haiku, for the
+  discovery sub-agent. Bootstrap is infrequent and its output seeds
+  every future Lore operation — precision matters more than cost.
+  Observed Haiku runs on real projects (echo_lab_ws) fabricated
+  `source_ref` values (plausible-looking Django paths that did not
+  exist). Sonnet is more conservative. Haiku remains available as
+  opt-in via `.lore/config.json → models.exploration: "haiku"`.
+- **`lore stats` now shows an estimated token count** alongside the
+  bytes exchanged for each tool and for the totals. Uses a 0.3
+  bytes-per-token heuristic (honest proxy — the MCP server cannot
+  measure true tokens from the model's side).
+
+### Notes
+- Model routing audit done for all slash commands. Read-only commands
+  (`/lore:audit`, `/lore:reconcile`, `/lore:probe`, `/lore:recent`)
+  continue on Haiku — they cannot produce bad data. Write-path
+  commands (`/lore:init`, `/lore:bootstrap`) already ran on the
+  caller's model (Sonnet by default); structural prompt fixes in
+  v0.0.8 plus this model default address the reliability gap that
+  surfaced during v0.0.5 testing.
+
 ## [0.0.9] — 2026-04-23
 
 ### Added

@@ -10,11 +10,24 @@ may be a single repo **or** a workspace containing several repos/packages
 1. **Ensure the DB exists.** If `.lore/lore.db` does not exist, run
    `lore init` first.
 
-2. **Delegate discovery to a cheap sub-agent** to keep the cost low. If
-   `.lore/config.json` exists and has `models.exploration`, use that;
-   otherwise default to `haiku`. Invoke the `Agent` tool with:
+2. **Delegate discovery to a sub-agent.** Bootstrap is run infrequently
+   and the result seeds every future Lore operation, so **precision
+   matters more than cost**. Default to Sonnet. Haiku can be selected
+   explicitly for cheap-but-noisier scans on small / well-documented
+   codebases, or when the user is exploring. Resolution order:
+
+   - If `.lore/config.json` has `models.exploration`, honour it verbatim.
+   - Otherwise default to **`sonnet`**.
+
+   Rationale: prior Haiku runs have been observed to fabricate
+   `source_ref` values — file paths that look plausible given framework
+   conventions but do not exist in the target repo. Sonnet's structural
+   reasoning makes this failure mode rarer. Users who want Haiku can
+   opt in with `{"models": {"exploration": "haiku"}}`.
+
+   Invoke the `Agent` tool with:
    - `subagent_type`: `"general-purpose"`
-   - `model`: configured exploration model (default `"haiku"`)
+   - `model`: configured exploration model (default `"sonnet"`)
    - `description`: `"Scan repo for Lore seed"`
    - `prompt`: (use the template below, adapted to the current project)
 
