@@ -72,6 +72,18 @@ class TestAllowedRelations:
         with pytest.raises(SchemaError):
             validate_edge_types("validates", "module", "rule")
 
+    def test_part_of_supports_module_to_module_hierarchy(self):
+        """Inner module `part_of` parent module (e.g. Django app inside
+        a workspace-level `backend` repo module). Required for multi-repo
+        hierarchical layouts."""
+        assert is_relation_allowed("part_of", "module", "module")
+
+    def test_part_of_remains_restricted_for_other_types(self):
+        assert is_relation_allowed("part_of", "flow", "module")
+        assert is_relation_allowed("part_of", "capability", "module")
+        assert not is_relation_allowed("part_of", "module", "flow")
+        assert not is_relation_allowed("part_of", "module", "capability")
+
 
 class TestIds:
     @pytest.mark.parametrize(

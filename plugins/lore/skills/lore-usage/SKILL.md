@@ -216,7 +216,7 @@ persist from the caller after review.
 
 The schema rejects invalid type pairs. Most common:
 
-- `part_of`: flow/capability/form/event → **module**
+- `part_of`: flow/capability/form/event → **module**; also **module → module** (for hierarchy — inner modules that are part of a parent module, e.g. Django apps inside a `backend` repo module).
 - `implements`: flow → capability
 - `depends_on`: module/flow → module/flow (**not** capability → capability)
 - `triggers`: flow/event → event/flow

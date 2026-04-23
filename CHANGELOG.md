@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.17] — 2026-04-23
+
+### Fixed
+- **`part_of` now allows `module → module`** — the missing triple that
+  blocked hierarchical workspace layouts. Observed during NS Backoffice
+  testing: the new hierarchical `/lore:init` correctly proposed 2 repos
+  + 40 inner modules, but when persisting the `part_of` edges the
+  schema rejected them because only `flow/capability/form/event →
+  module` was allowed. The Claude in the session fell back to
+  `depends_on`, which has *completely different* semantics (functional
+  dependency, not composition) and would produce wrong answers for
+  any query like "what modules are inside backend?" or "what depends
+  on backend?".
+
+  The fix adds `("part_of", "module", "module")` to `ALLOWED_RELATIONS`.
+  Other part_of triples remain unchanged. `module → flow` and
+  `module → capability` are still disallowed (those are inverted).
+
+### Migration
+- Existing graphs that used `depends_on` as a workaround for
+  hierarchy should relabel those edges. For NS Backoffice
+  specifically, the 40 edges from inner modules to their repo
+  module should become `part_of`. Procedure: in the session, delete
+  and recreate each edge with the correct relation, or use SQL
+  directly:
+  ```sql
+  UPDATE edges SET relation='part_of'
+  WHERE relation='depends_on'
+    AND from_id IN (SELECT id FROM nodes WHERE type='module')
+    AND to_id IN ('backend', 'frontend');  -- adjust parent ids
+  ```
+
 ## [0.0.16] — 2026-04-23
 
 ### Changed
