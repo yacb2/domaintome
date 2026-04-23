@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.18] — 2026-04-23
+
+### Added
+- **`/lore:stats` slash command** — wrapper over `lore stats` CLI with
+  an optional `--since <iso>` arg. Was missing from the slash surface
+  despite existing in the CLI since v0.0.2; users naturally tried
+  `/lore:stats` and got "command not found". Oversight corrected.
+
 ## [0.0.17] — 2026-04-23
 
 ### Fixed
