@@ -78,7 +78,23 @@ may be a single repo **or** a workspace containing several repos/packages
      - `source_ref: "<path[:line]>"` when the node maps to a concrete file
      - `last_verified_at: "<today ISO>"`
 
-5. **Run `lore_audit()`** and report any findings.
+   Remember the counts you asked `lore_add_nodes` / `lore_add_edges` to
+   persist — call them `N_nodes` and `N_edges`.
+
+5. **Mandatory verification — do NOT skip this.** Hallucinating a
+   success message without verifying is the most common failure mode of
+   this command.
+
+   a. Call `lore_audit()`. The report includes `nodes_total` and
+      `edges_total`.
+   b. Compare `nodes_total` to `N_nodes` and `edges_total` to `N_edges`.
+      They should match (or exceed, if the DB already had content).
+   c. Report exactly one of two outcomes:
+      - **Match**: "Sembrados N_nodes nodos y N_edges edges. Verificado
+        con `lore_audit`." Then surface any audit findings.
+      - **Mismatch**: "FAILURE: pedí sembrar N_nodes / N_edges pero la
+        DB contiene <nodes_total> / <edges_total>. Las escrituras no
+        persistieron." Stop — do not retry silently.
 
 6. **Create `.lore/config.json`** if it doesn't exist, seeded with the
    detected language, app name and default model routing:

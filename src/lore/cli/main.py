@@ -13,6 +13,7 @@ from lore.graph import (
     audit as _audit,
 )
 from lore.graph.queries import FINDING_KEYS
+from lore.lifecycle import reconcile as _reconcile
 from lore.graph import (
     find_variants as _find_variants,
 )
@@ -212,6 +213,89 @@ def export(
     conn = open_db(db)
     written = _export_markdown(conn, out)
     typer.echo(f"Wrote {len(written)} files under {out}")
+
+
+@app.command()
+def reconcile(
+    db: DBOption = DEFAULT_DB,
+    since: Annotated[
+        str | None,
+        typer.Option("--since", help="Git rev — restrict scan to files changed since."),
+    ] = None,
+    stale_days: Annotated[
+        int,
+        typer.Option("--stale-days", help="Days threshold for `stale` findings."),
+    ] = 90,
+    root: Annotated[
+        Path | None,
+        typer.Option(
+            "--root",
+            help="Project root used to resolve source_ref. Defaults to the DB's parent's parent (i.e. the dir that contains .lore/).",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the full report as JSON."),
+    ] = False,
+    quiet: Annotated[
+        bool,
+        typer.Option(
+            "--quiet",
+            help="Suppress output on clean scans. Exit 0 if no drift, 1 otherwise. Useful for hooks.",
+        ),
+    ] = False,
+) -> None:
+    """Detect drift between the code and the graph. Read-only.
+
+    Reports three categories: `dead_refs` (source_ref points at a file that
+    no longer exists), `stale` (last_verified_at older than --stale-days),
+    `never_verified` (has source_ref but no last_verified_at).
+    """
+    _require_db(db)
+    resolved_root = root or db.resolve().parent.parent
+    conn = open_db(db)
+    report = _reconcile(
+        conn, resolved_root, since=since, stale_days=stale_days
+    )
+    total = (
+        len(report["dead_refs"])
+        + len(report["stale"])
+        + len(report["never_verified"])
+    )
+
+    if json_output:
+        typer.echo(json.dumps(report, indent=2, sort_keys=True))
+        raise typer.Exit(code=1 if total else 0)
+
+    if quiet:
+        if total == 0:
+            raise typer.Exit(code=0)
+        typer.echo(
+            f"drift: dead={len(report['dead_refs'])} "
+            f"stale={len(report['stale'])} "
+            f"never_verified={len(report['never_verified'])}"
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(
+        f"-- reconcile ({report['scope']}, scanned {report['scanned_nodes']} "
+        f"nodes with source_ref) --"
+    )
+    for w in report["warnings"]:
+        typer.echo(f"  warning: {w}")
+
+    if total == 0:
+        typer.echo("OK — no drift")
+        return
+
+    for category in ("dead_refs", "stale", "never_verified"):
+        items = report[category]
+        if not items:
+            continue
+        typer.echo(f"\n-- {category} ({len(items)}) --")
+        for it in items:
+            typer.echo(f"  {it}")
+    raise typer.Exit(code=1)
 
 
 @app.command()
