@@ -9,8 +9,13 @@ from typing import Annotated
 import typer
 
 from lore.export import export_markdown as _export_markdown
+from datetime import datetime, timezone
+
 from lore.graph import (
     audit as _audit,
+)
+from lore.graph import (
+    update_node as _update_node,
 )
 from lore.graph.queries import FINDING_KEYS
 from lore.lifecycle import reconcile as _reconcile
@@ -213,6 +218,32 @@ def export(
     conn = open_db(db)
     written = _export_markdown(conn, out)
     typer.echo(f"Wrote {len(written)} files under {out}")
+
+
+@app.command()
+def verify(
+    node_id: str,
+    db: DBOption = DEFAULT_DB,
+) -> None:
+    """Mark a node as verified today — updates metadata.last_verified_at.
+
+    Convenience wrapper around `lore_update_node(metadata_patch=…)`.
+    Keeps `reconcile`'s staleness signal useful without having to
+    remember the metadata shape each time.
+    """
+    from lore.graph.schema import SchemaError
+
+    _require_db(db)
+    conn = open_db(db)
+    today = datetime.now(timezone.utc).date().isoformat()
+    try:
+        _update_node(
+            conn, node_id, metadata_patch={"last_verified_at": today}
+        )
+    except SchemaError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Verified {node_id} (last_verified_at={today})")
 
 
 @app.command()

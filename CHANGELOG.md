@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.12] — 2026-04-23
+
+### Added
+- **`lore verify <id>` CLI + `/lore:verify <id>` slash command.**
+  Convenience wrapper that updates `metadata.last_verified_at` to
+  today. Closes the reconcile loop: after re-inspecting a node's
+  referenced code, one command marks it fresh. Without this, staleness
+  signal degraded over time as nobody bothered to construct the full
+  `lore_update_node(metadata_patch=…)` call by hand.
+- **`metadata.links` convention** for rich cross-references. Each
+  node can carry a list of `{title, url, type}` pointers to PRDs,
+  design docs, RFCs, incidents, tickets. Documented in `SKILL.md`.
+  Aligns with the Lore vision of "node as central reference page".
+- **`/lore:show` renders nodes as readable Markdown briefings**:
+  Identity → Body (verbatim) → Links section (from `metadata.links`)
+  → References section (source_ref, provenance, verification) →
+  Relations (incoming/outgoing grouped by relation) → Raw metadata
+  (leftovers). Dramatic improvement over the old "dump fields" view.
+- **`SKILL.md` guidance on `source_ref`**: when adding or updating a
+  node during a session that just touched code, the node MUST carry
+  `source_ref` pointing at the edited/read path. Closes the
+  auto-enrichment loop so reconcile has something to detect drift
+  against without manual bookkeeping.
+
+### Notes
+- This release moves Lore closer to the stated vision: each node
+  becomes a "landing page" for a concept — body explains it, links
+  navigate outward to external material, references anchor it in
+  code. `/lore:show` is now useful as a standalone briefing tool.
+
 ## [0.0.11] — 2026-04-23
 
 ### Changed

@@ -79,6 +79,52 @@ later audit what was inferred vs. stated. Standard keys:
 `inferred_from_conversation` is allowed but **prefer asking first** before
 persisting inferences.
 
+## Rich references — making each node a reference page
+
+Lore is designed to be the central entry point to everything known about
+a concept. A node should answer "what is X, where does it live, and
+where do I read more?" without a second hop. Use `metadata.links` for
+outbound pointers:
+
+```
+metadata.links = [
+  {"title": "PRD v2: billing overhaul", "url": "https://…/PRD.md", "type": "prd"},
+  {"title": "Figma — cart flow", "url": "https://figma.com/…", "type": "design"},
+  {"title": "Incident 2026-03-12 (Linear INC-431)", "url": "https://…", "type": "incident"},
+  {"title": "RFC-007: idempotency keys", "url": "https://…", "type": "rfc"}
+]
+```
+
+`type` is free-form but conventional values are `prd | design | rfc |
+ticket | incident | external-doc | runbook`. Use them so future queries
+can filter (`lore_list(tag=...)` does not yet filter on link type, but
+the structure is ready).
+
+Policy: **add a link whenever the user references external material
+during a conversation that relates to a Lore node**. Pass the user-stated
+title verbatim. Do not guess URLs — if the user mentions a document by
+name but no URL, ask, or omit the link.
+
+The body of a node should be rich enough to orient a new reader: what
+the concept is, why it matters, and the top 1–2 gotchas. The node is
+the landing page; the links are the onward navigation.
+
+## Attaching code — source_ref
+
+When adding or updating a node during a session where Claude just
+edited or read code, the `source_ref` MUST be set to that path (with
+line or symbol when known). Format: `path` or `path:line` or
+`path:Class.method`.
+
+Examples:
+- After `Edit("src/billing/charge.py", ...)` → next `lore_add_node`
+  describing the charge flow sets `source_ref = "src/billing/charge.py"`.
+- After `Read("src/billing/charge.py:45")` of a specific function →
+  `source_ref = "src/billing/charge.py:charge_customer"`.
+
+This closes the auto-enrichment loop — reconcile can then detect drift
+whenever that file moves, disappears, or ages out.
+
 ## Updating metadata without losing provenance
 
 `lore_update_node(metadata=…)` **replaces** the whole dict (destroys
