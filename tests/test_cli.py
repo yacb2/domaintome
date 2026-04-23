@@ -120,6 +120,31 @@ def test_install_hooks_creates_post_commit(tmp_path):
     assert "lore reconcile" in content
 
 
+def test_verify_updates_last_verified_at(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    _seed(db)
+    result = runner.invoke(app, ["verify", "pay-flow", "--db", str(db)])
+    assert result.exit_code == 0, result.output
+    assert "last_verified_at=" in result.output
+
+    from lore.graph import get_node, open_db as _open
+    conn = _open(db)
+    node = get_node(conn, "pay-flow")
+    assert node is not None
+    assert node["metadata"].get("last_verified_at"), (
+        "last_verified_at must be set after verify"
+    )
+
+
+def test_verify_unknown_node_fails(tmp_path):
+    db = tmp_path / "lore.db"
+    _seed(db)
+    result = runner.invoke(app, ["verify", "ghost", "--db", str(db)])
+    assert result.exit_code == 1
+
+
 def test_install_hooks_refuses_non_git(tmp_path):
     not_a_repo = tmp_path / "plain"
     not_a_repo.mkdir()
