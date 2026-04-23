@@ -37,11 +37,14 @@ RELATIONS: frozenset[str] = frozenset(
 # A relation may appear multiple times with different type pairs.
 ALLOWED_RELATIONS: frozenset[tuple[str, str, str]] = frozenset(
     {
-        # part_of: flow/capability/form/event → module
+        # part_of: flow/capability/form/event → module,
+        # plus module → module for hierarchical layouts (e.g. multi-repo
+        # workspaces where inner apps are part_of the parent repo).
         ("part_of", "flow", "module"),
         ("part_of", "capability", "module"),
         ("part_of", "form", "module"),
         ("part_of", "event", "module"),
+        ("part_of", "module", "module"),
         # implements: flow → capability
         ("implements", "flow", "capability"),
         # depends_on: module/flow → module/flow
