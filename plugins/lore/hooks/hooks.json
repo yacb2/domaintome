@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f .lore/lore.db && lore reconcile --quiet 2>&1 ; true"
+          }
+        ]
+      }
+    ]
+  }
+}
