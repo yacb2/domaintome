@@ -404,19 +404,35 @@ def stats(
         typer.echo(f"(no tool calls recorded{scope})")
         return
 
+    # Rough byte→token conversion. See `lore stats --help` for why this is
+    # a proxy, not a measurement. UTF-8 text / JSON bounces around 3–4
+    # bytes per token; 0.3 is conservative and enough for relative
+    # comparisons between tools / time periods.
+    def _tokens(b: int) -> str:
+        return f"~{int(b * 0.3):,}".replace(",", ".")
+
     typer.echo(f"-- Lore usage ({data['first_call_at']} → {data['last_call_at']}) --")
     typer.echo(f"  calls:   {data['calls']}")
     typer.echo(f"  errors:  {data['errors']}")
-    typer.echo(f"  input:   {_format_bytes(data['input_bytes'])}")
-    typer.echo(f"  output:  {_format_bytes(data['output_bytes'])}")
-    typer.echo(f"  total:   {_format_bytes(data['total_bytes'])}")
+    typer.echo(
+        f"  input:   {_format_bytes(data['input_bytes']):>10}  "
+        f"({_tokens(data['input_bytes'])} tokens)"
+    )
+    typer.echo(
+        f"  output:  {_format_bytes(data['output_bytes']):>10}  "
+        f"({_tokens(data['output_bytes'])} tokens)"
+    )
+    typer.echo(
+        f"  total:   {_format_bytes(data['total_bytes']):>10}  "
+        f"({_tokens(data['total_bytes'])} tokens)"
+    )
 
     typer.echo("\n-- by tool --")
     for row in data["by_tool"]:
         total = row["input_bytes"] + row["output_bytes"]
         typer.echo(
             f"  {row['tool']:<24} {row['calls']:>5} calls  "
-            f"{_format_bytes(total):>10}"
+            f"{_format_bytes(total):>10}  ({_tokens(total)} tokens)"
         )
 
     typer.echo("\n-- by op --")

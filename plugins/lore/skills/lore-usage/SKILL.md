@@ -144,7 +144,7 @@ exploration to the cheaper `lore-explorer` sub-agent (Haiku):
 |---|---|
 | Single node lookup, 1-2 tool calls | Stay in caller's model |
 | Scanning >20 nodes, deep traversal, multi-hop audit | `Agent(subagent_type: "lore-explorer", prompt: "<question>")` |
-| Bootstrap / repo scan | Already handled by `/lore:bootstrap` (Haiku) |
+| Bootstrap / repo scan | Already handled by `/lore:bootstrap` (Sonnet by default; Haiku opt-in via `.lore/config.json → models.exploration`) |
 | Detecting contradictions, choosing relations, modelling new nodes | Caller's model — requires reasoning |
 | Any write (`lore_add_*`, `lore_update_*`, `lore_delete_*`) | **Caller's model only.** Never let a Haiku sub-agent write |
 
