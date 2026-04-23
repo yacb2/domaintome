@@ -99,6 +99,66 @@ def test_read_commands_refuse_missing_db(tmp_path):
         assert not missing.exists(), f"{cmd} must not create the DB"
 
 
+def test_install_hooks_creates_post_commit(tmp_path):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    db = tmp_path / "lore.db"
+    _seed(db)
+
+    result = runner.invoke(
+        app, ["install-hooks", "--repo", str(repo), "--db", str(db)]
+    )
+    assert result.exit_code == 0, result.output
+    hook = repo / ".git" / "hooks" / "post-commit"
+    assert hook.exists()
+    assert hook.stat().st_mode & 0o111, "hook must be executable"
+    content = hook.read_text()
+    assert str(db.resolve()) in content
+    assert "lore reconcile" in content
+
+
+def test_install_hooks_refuses_non_git(tmp_path):
+    not_a_repo = tmp_path / "plain"
+    not_a_repo.mkdir()
+    db = tmp_path / "lore.db"
+    _seed(db)
+    result = runner.invoke(
+        app, ["install-hooks", "--repo", str(not_a_repo), "--db", str(db)]
+    )
+    assert result.exit_code == 1
+    assert "not a git repository" in result.output
+
+
+def test_install_hooks_refuses_to_clobber(tmp_path):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / ".git" / "hooks").mkdir(exist_ok=True)
+    existing = repo / ".git" / "hooks" / "post-commit"
+    existing.write_text("#!/bin/sh\necho custom\n")
+    db = tmp_path / "lore.db"
+    _seed(db)
+    result = runner.invoke(
+        app, ["install-hooks", "--repo", str(repo), "--db", str(db)]
+    )
+    assert result.exit_code == 1
+    assert "already exists" in result.output
+    assert existing.read_text() == "#!/bin/sh\necho custom\n", (
+        "must not overwrite without --force"
+    )
+
+    result2 = runner.invoke(
+        app, ["install-hooks", "--repo", str(repo), "--db", str(db), "--force"]
+    )
+    assert result2.exit_code == 0
+    assert "lore reconcile" in existing.read_text()
+
+
 def test_export(tmp_path):
     db = tmp_path / "lore.db"
     _seed(db)

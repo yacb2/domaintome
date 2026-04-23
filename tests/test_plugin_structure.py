@@ -113,6 +113,23 @@ def test_expected_plugin_files_present() -> None:
         COMMANDS_DIR / "impact.md",
         COMMANDS_DIR / "bootstrap.md",
         COMMANDS_DIR / "probe.md",
+        COMMANDS_DIR / "reconcile.md",
+        PLUGIN_DIR / "hooks" / "hooks.json",
     ]
     missing = [str(p.relative_to(REPO_ROOT)) for p in expected if not p.exists()]
     assert not missing, f"plugin files missing: {missing}"
+
+
+def test_hooks_json_has_session_start() -> None:
+    data = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())
+    assert "hooks" in data
+    assert "SessionStart" in data["hooks"], (
+        "SessionStart hook expected to run reconcile when a session opens"
+    )
+    session_start = data["hooks"]["SessionStart"]
+    assert isinstance(session_start, list) and session_start
+    inner = session_start[0].get("hooks", [])
+    assert any(
+        h.get("type") == "command" and "lore reconcile" in h.get("command", "")
+        for h in inner
+    ), "SessionStart must invoke `lore reconcile`"

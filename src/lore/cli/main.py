@@ -298,6 +298,71 @@ def reconcile(
     raise typer.Exit(code=1)
 
 
+POST_COMMIT_TEMPLATE = """\
+#!/bin/sh
+# Installed by `lore install-hooks`. Runs Lore reconcile against the
+# commit's delta and prints a one-line drift summary if anything changed.
+# Non-blocking: failures never abort a commit.
+
+DB="{db_path}"
+if ! command -v lore >/dev/null 2>&1; then
+    exit 0
+fi
+lore reconcile --db "$DB" --since HEAD~1 --quiet 2>&1 || true
+"""
+
+
+@app.command(name="install-hooks")
+def install_hooks(
+    repo: Annotated[
+        Path,
+        typer.Option(
+            "--repo",
+            help="Git repository where the post-commit hook should be installed.",
+        ),
+    ],
+    db: DBOption = DEFAULT_DB,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Overwrite an existing post-commit hook. Without this flag, refuses to clobber.",
+        ),
+    ] = False,
+) -> None:
+    """Install a git post-commit hook that runs `lore reconcile` on the commit.
+
+    Workspace note: if you maintain a single Lore graph at the workspace
+    root and have several repos under it, run this command once per repo,
+    passing the same `--db` each time.
+    """
+    repo = repo.resolve()
+    git_dir = repo / ".git"
+    if not git_dir.exists():
+        typer.echo(f"{repo} is not a git repository (no .git/)", err=True)
+        raise typer.Exit(code=1)
+    hooks_dir = git_dir / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    target = hooks_dir / "post-commit"
+
+    if target.exists() and not force:
+        typer.echo(
+            f"{target} already exists. Use --force to overwrite, or edit it manually.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    db_resolved = db.resolve()
+    _require_db(db_resolved)
+    target.write_text(
+        POST_COMMIT_TEMPLATE.format(db_path=db_resolved), encoding="utf-8"
+    )
+    target.chmod(0o755)
+    typer.echo(
+        f"Installed post-commit hook at {target} (reconciles against {db_resolved})"
+    )
+
+
 @app.command()
 def mcp(db: DBOption = DEFAULT_DB) -> None:
     """Run the Lore MCP server over stdio."""

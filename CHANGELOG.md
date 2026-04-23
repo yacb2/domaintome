@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.9] — 2026-04-23
+
+### Added
+- **`SessionStart` plugin hook.** On every new Claude Code session with
+  the Lore plugin loaded, runs `lore reconcile --quiet` against the
+  local `.lore/lore.db`. Silent when there is no DB and when the graph
+  is clean; one-line drift summary otherwise. No-op outside of projects
+  with a Lore graph. This closes the loop where edits made between
+  sessions went unnoticed.
+- **`lore install-hooks --repo <path>` CLI.** Installs a git
+  `post-commit` hook in the target repo that runs `lore reconcile
+  --since HEAD~1 --quiet` after every commit. Non-blocking: a failing
+  reconcile never aborts a commit. Workspace-aware: designed to be run
+  once per repo in a multi-repo workspace, all pointing at the same
+  `--db` path so a single graph sees drift from any repo.
+
+### Notes
+- The SessionStart hook is light (one `test -f` + one reconcile when
+  the DB exists). Users who prefer not to run it can remove
+  `plugins/lore/hooks/hooks.json` or disable the plugin per project.
+- The git post-commit hook is opt-in (`lore install-hooks` is never run
+  automatically). Reconcile is filtered by `--since HEAD~1` so only
+  files changed in the commit itself are checked.
+
 ## [0.0.8] — 2026-04-23
 
 ### Added
