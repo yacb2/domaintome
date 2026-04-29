@@ -19,7 +19,6 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from lore.export import export_markdown as _export_markdown
-from lore.graph.schema import schema_descriptor as _schema_descriptor
 from lore.graph import (
     add_edge as _add_edge,
 )
@@ -74,6 +73,7 @@ from lore.graph import (
 from lore.graph import (
     update_node as _update_node,
 )
+from lore.graph.schema import schema_descriptor as _schema_descriptor
 
 
 def _bytes(value: Any) -> int:

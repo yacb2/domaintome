@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -29,11 +29,11 @@ def conn(project_root: Path):
 
 
 def _today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+    return datetime.now(UTC).date().isoformat()
 
 
 def _days_ago(n: int) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=n)).date().isoformat()
+    return (datetime.now(UTC) - timedelta(days=n)).date().isoformat()
 
 
 def test_reconcile_empty_graph_has_no_drift(conn, project_root):

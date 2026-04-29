@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -84,7 +84,7 @@ def reconcile(
     never_verified: list[dict[str, Any]] = []
     planned: list[dict[str, Any]] = []
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     scanned = 0
 
     for row in rows:
@@ -129,7 +129,7 @@ def reconcile(
             lv_raw = str(last_verified).replace("Z", "+00:00")
             lv = datetime.fromisoformat(lv_raw)
             if lv.tzinfo is None:
-                lv = lv.replace(tzinfo=timezone.utc)
+                lv = lv.replace(tzinfo=UTC)
         except ValueError:
             warnings.append(
                 f"node {row['id']!r} has unparseable last_verified_at={last_verified!r}"

@@ -153,7 +153,6 @@ def test_hook_session_start_notes_empty_graph(tmp_path):
     import json as _json
 
     db = tmp_path / "lore.db"
-    _seed_empty_db(db) if False else None  # placeholder; we need real seed
     from lore.graph import open_db as _open
     _open(db).close()  # materialize empty DB
     result = runner.invoke(app, ["hook-session-start", "--db", str(db)])
@@ -221,7 +220,6 @@ def test_hook_post_tool_use_silent_when_db_missing(tmp_path):
 
 
 def test_verify_updates_last_verified_at(tmp_path):
-    import json as _json
 
     db = tmp_path / "lore.db"
     _seed(db)
@@ -229,7 +227,8 @@ def test_verify_updates_last_verified_at(tmp_path):
     assert result.exit_code == 0, result.output
     assert "last_verified_at=" in result.output
 
-    from lore.graph import get_node, open_db as _open
+    from lore.graph import get_node
+    from lore.graph import open_db as _open
     conn = _open(db)
     node = get_node(conn, "pay-flow")
     assert node is not None
