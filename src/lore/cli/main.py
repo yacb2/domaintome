@@ -34,6 +34,11 @@ from lore.graph import (
 from lore.graph import (
     stats as _stats,
 )
+from lore.graph.quality import (
+    errors_breakdown as _errors_breakdown,
+    quality_report as _quality_report,
+    stats_by_day as _stats_by_day,
+)
 
 DEFAULT_DB = Path(".lore") / "lore.db"
 
@@ -677,6 +682,24 @@ def stats(
             help="ISO timestamp — only count calls at or after this time.",
         ),
     ] = None,
+    by_day: Annotated[
+        bool,
+        typer.Option(
+            "--by-day",
+            help="Print a per-day breakdown of calls, errors and warnings.",
+        ),
+    ] = False,
+    errors: Annotated[
+        bool,
+        typer.Option(
+            "--errors",
+            help="Print top error messages with counts and last-seen.",
+        ),
+    ] = False,
+    json_out: Annotated[
+        bool,
+        typer.Option("--json", help="Emit JSON instead of pretty text."),
+    ] = False,
 ) -> None:
     """Show token/byte usage analytics for this project's Lore MCP.
 
@@ -687,6 +710,14 @@ def stats(
     _require_db(db)
     conn = open_db(db)
     data = _stats(conn, since=since)
+    extra: dict[str, Any] = {}
+    if by_day:
+        extra["by_day"] = _stats_by_day(conn, since=since)
+    if errors:
+        extra["errors"] = _errors_breakdown(conn, since=since)
+    if json_out:
+        typer.echo(json.dumps({**data, **extra}, indent=2))
+        return
     if data["calls"] == 0:
         scope = f" since {since}" if since else ""
         typer.echo(f"(no tool calls recorded{scope})")
@@ -726,6 +757,102 @@ def stats(
     typer.echo("\n-- by op --")
     for row in data["by_op"]:
         typer.echo(f"  {row['op']:<16} {row['calls']:>5}")
+
+    if "by_day" in extra:
+        typer.echo("\n-- by day --")
+        typer.echo(f"  {'day':<10}  {'calls':>6}  {'errors':>6}  {'warns':>6}  {'bytes':>10}")
+        for row in extra["by_day"]:
+            typer.echo(
+                f"  {row['day']:<10}  {row['calls']:>6}  {row['errors']:>6}  "
+                f"{row['warnings']:>6}  {_format_bytes(row['bytes']):>10}"
+            )
+
+    if "errors" in extra:
+        typer.echo("\n-- top errors --")
+        if not extra["errors"]:
+            typer.echo("  (none)")
+        for row in extra["errors"]:
+            typer.echo(f"  [{row['n']:>3}× {row['tool']}] {row['error']}")
+            typer.echo(
+                f"        first: {row['first_seen']}   last: {row['last_seen']}"
+            )
+
+
+@app.command()
+def quality(
+    db: DBOption = DEFAULT_DB,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Emit JSON instead of pretty text.")
+    ] = False,
+) -> None:
+    """Content-quality report: provenance coverage, body coverage,
+    orphans by type, top schema errors, warnings distribution.
+
+    Complements `lore audit` (structural integrity) by inspecting how good
+    the *content* of the graph is. Run after a few days of activity to see
+    where the LLM keeps slipping (missing source, thin bodies, isolated
+    rules/decisions, repeated relation rejections)."""
+    _require_db(db)
+    conn = open_db(db)
+    rep = _quality_report(conn)
+    if json_out:
+        typer.echo(json.dumps(rep, indent=2))
+        return
+
+    total = rep["node_total"]
+    typer.echo(f"-- Lore quality — {total} nodes --\n")
+
+    typer.echo("-- coverage by type --")
+    typer.echo(f"  {'type':<12}  {'total':>6}  {'body':>6}  {'src':>6}  {'ref':>6}")
+    for ntype, c in sorted(rep["by_type"].items()):
+        t = c["total"] or 1
+        typer.echo(
+            f"  {ntype:<12}  {c['total']:>6}  "
+            f"{c['with_body']*100//t:>5}%  "
+            f"{c['with_source']*100//t:>5}%  "
+            f"{c['with_ref']*100//t:>5}%"
+        )
+
+    if rep["body_thin"]:
+        typer.echo(f"\n-- thin body ({len(rep['body_thin'])} nodes) --")
+        for n in rep["body_thin"][:10]:
+            typer.echo(f"  {n['type']:<12}  {n['id']:<40}  body={n['body_len']} chars")
+        if len(rep["body_thin"]) > 10:
+            typer.echo(f"  … +{len(rep['body_thin']) - 10} more")
+
+    if rep["missing_source"]:
+        typer.echo(f"\n-- missing metadata.source ({len(rep['missing_source'])}) --")
+        for nid in rep["missing_source"][:10]:
+            typer.echo(f"  {nid}")
+        if len(rep["missing_source"]) > 10:
+            typer.echo(f"  … +{len(rep['missing_source']) - 10} more")
+
+    if rep["non_canonical_source"]:
+        typer.echo("\n-- non-canonical metadata.source --")
+        for src, n in sorted(
+            rep["non_canonical_source"].items(), key=lambda x: -x[1]
+        ):
+            typer.echo(f"  {n:>4}  {src}")
+
+    typer.echo("\n-- orphans by type --")
+    if not rep["orphans_by_type"]:
+        typer.echo("  (none)")
+    for t, n in sorted(rep["orphans_by_type"].items(), key=lambda x: -x[1]):
+        typer.echo(f"  {n:>4}  {t}")
+
+    if rep["top_errors"]:
+        typer.echo("\n-- top schema errors --")
+        for e in rep["top_errors"][:5]:
+            short = e["error"][:120]
+            typer.echo(f"  {e['count']:>4}× {short}")
+
+    if rep["warnings_by_tool"]:
+        typer.echo("\n-- warnings by tool --")
+        for w in rep["warnings_by_tool"]:
+            typer.echo(
+                f"  {w['tool']:<24} {w['warnings']:>5} warnings over "
+                f"{w['calls']} calls"
+            )
 
 
 if __name__ == "__main__":

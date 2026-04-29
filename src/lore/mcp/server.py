@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+import time
 from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from lore.export import export_markdown as _export_markdown
+from lore.graph.schema import schema_descriptor as _schema_descriptor
 from lore.graph import (
     add_edge as _add_edge,
 )
@@ -94,8 +96,10 @@ def _instrumented(
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             in_bytes = _bytes(kwargs) + _bytes(list(args))
             node_id = kwargs.get("id") or kwargs.get("from_id")
+            node_type = kwargs.get("type")
             error: str | None = None
             result: Any = None
+            t0 = time.perf_counter()
             try:
                 result = fn(*args, **kwargs)
                 return result
@@ -103,13 +107,28 @@ def _instrumented(
                 error = f"{type(exc).__name__}: {exc}"
                 raise
             finally:
+                latency_ms = int((time.perf_counter() - t0) * 1000)
+                warnings_count = 0
+                if isinstance(result, dict):
+                    w = result.get("warnings")
+                    if isinstance(w, list):
+                        warnings_count = len(w)
+                elif isinstance(result, list):
+                    for item in result:
+                        if isinstance(item, dict):
+                            w = item.get("warnings")
+                            if isinstance(w, list):
+                                warnings_count += len(w)
                 _log_call(
                     conn,
                     tool=tool_name,
                     op=op,
                     node_id=node_id if isinstance(node_id, str) else None,
+                    node_type=node_type if isinstance(node_type, str) else None,
                     input_bytes=in_bytes,
                     output_bytes=_bytes(result),
+                    latency_ms=latency_ms,
+                    warnings_count=warnings_count,
                     error=error,
                 )
 
@@ -123,6 +142,18 @@ def build_server(db_path: str | Path) -> FastMCP:
     conn: sqlite3.Connection = open_db(db_path)
     mcp = FastMCP("lore")
 
+    def _shrink(node: dict[str, Any], return_mode: str) -> dict[str, Any]:
+        """Default response shape is minimal: id + status + warnings.
+        Pass return_mode='full' to get the entire persisted node."""
+        if return_mode == "full":
+            return node
+        return {
+            "id": node["id"],
+            "type": node["type"],
+            "status": node.get("status"),
+            "warnings": node.get("warnings", []),
+        }
+
     @mcp.tool()
     @_instrumented(conn, "lore_add_node", "create")
     def lore_add_node(
@@ -132,6 +163,7 @@ def build_server(db_path: str | Path) -> FastMCP:
         body: str | None = None,
         status: str = "active",
         metadata: dict[str, Any] | None = None,
+        return_mode: str = "summary",
     ) -> dict[str, Any]:
         """Create a new node. Type must be one of: module, capability, flow,
         event, rule, form, entity, decision.
@@ -139,9 +171,15 @@ def build_server(db_path: str | Path) -> FastMCP:
         Write content (title, body) in the same natural language the user uses
         in conversation. Populate `metadata.source` with one of
         `user_stated | user_confirmed | inferred_from_code |
-        inferred_from_conversation` and `metadata.confidence`
-        (`high | medium | low`) so the graph stays auditable."""
-        return _add_node(
+        inferred_from_conversation | code_change | scan | incident | manual`
+        and `metadata.confidence` (`high | medium | low`) so the graph stays
+        auditable.
+
+        Returns `{id, type, status, warnings}` by default. Pass
+        `return_mode='full'` to receive the entire persisted node. Inspect
+        `warnings` to fix soft-validation issues (thin body, missing source,
+        orphan rule/decision, etc.) on the next call."""
+        node = _add_node(
             conn,
             node_id=id,
             type=type,
@@ -150,14 +188,35 @@ def build_server(db_path: str | Path) -> FastMCP:
             status=status,
             metadata=metadata,
         )
+        return _shrink(node, return_mode)
 
     @mcp.tool()
     @_instrumented(conn, "lore_add_nodes", "batch_create")
-    def lore_add_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def lore_add_nodes(
+        nodes: list[dict[str, Any]],
+        return_mode: str = "summary",
+    ) -> list[dict[str, Any]]:
         """Batch-create nodes in a single transaction. Each item needs
         `id`, `type`, `title`; optional `body`, `status`, `metadata`.
-        Fails atomically if any entry is invalid."""
-        return _add_nodes_batch(conn, nodes)
+        Fails atomically if any entry is invalid.
+
+        Default response is the summary form per node; pass
+        `return_mode='full'` for the full nodes."""
+        results = _add_nodes_batch(conn, nodes)
+        return [_shrink(n, return_mode) for n in results]
+
+    @mcp.tool()
+    @_instrumented(conn, "lore_schema", "read")
+    def lore_schema() -> dict[str, Any]:
+        """Return the schema descriptor: node types, statuses, allowed
+        relations per `(from_type, to_type)` pair, recommended metadata
+        vocabulary, id format, and body minimums.
+
+        Call this **before** doing a batch write if you are unsure which
+        relations are valid for a given pair — it is much cheaper than
+        recovering from `SchemaError` rollbacks. The response is constant
+        for a given Lore version."""
+        return _schema_descriptor()
 
     @mcp.tool()
     @_instrumented(conn, "lore_update_node", "update")

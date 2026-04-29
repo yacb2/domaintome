@@ -40,14 +40,28 @@ CREATE TABLE IF NOT EXISTS audit_log (
     tool TEXT NOT NULL,
     op TEXT NOT NULL,
     node_id TEXT,
+    node_type TEXT,
     input_bytes INTEGER NOT NULL DEFAULT 0,
     output_bytes INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER,
+    warnings_count INTEGER NOT NULL DEFAULT 0,
+    client_id TEXT,
     error TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_tool ON audit_log(tool);
 """
+
+# Aditivo: para DBs preexistentes (v0.0.x) extendemos audit_log con columnas
+# nuevas sin romper compatibilidad. SQLite no soporta IF NOT EXISTS en
+# ADD COLUMN, así que detectamos y aplicamos.
+_AUDIT_LOG_COLUMNS_v01: tuple[tuple[str, str], ...] = (
+    ("node_type", "TEXT"),
+    ("latency_ms", "INTEGER"),
+    ("warnings_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("client_id", "TEXT"),
+)
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
@@ -64,9 +78,22 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def _migrate_audit_log(conn: sqlite3.Connection) -> None:
+    """Add v0.1.0 columns to audit_log if running on a pre-existing DB."""
+    cols = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(audit_log)").fetchall()
+    }
+    for name, decl in _AUDIT_LOG_COLUMNS_v01:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE audit_log ADD COLUMN {name} {decl}")
+    conn.commit()
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     """Create tables and indexes if they don't exist."""
     conn.executescript(SCHEMA_SQL)
+    _migrate_audit_log(conn)
     conn.commit()
 
 

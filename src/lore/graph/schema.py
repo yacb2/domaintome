@@ -93,6 +93,28 @@ NODE_STATUSES: frozenset[str] = frozenset(
     {"active", "draft", "deprecated", "superseded", "archived"}
 )
 
+# Canonical metadata.source values. Non-canonical values are persisted
+# but emit a soft warning so the vocabulary can be tightened over time.
+CANONICAL_SOURCES: frozenset[str] = frozenset(
+    {
+        "user_stated",
+        "user_confirmed",
+        "inferred_from_code",
+        "inferred_from_conversation",
+        "code_change",
+        "scan",
+        "incident",
+        "manual",
+    }
+)
+
+CANONICAL_CONFIDENCES: frozenset[str] = frozenset({"high", "medium", "low"})
+
+# Tipos para los que el cuerpo (body) debería tener contenido descriptivo.
+# Usado por el lint suave: persistimos igual, pero emitimos un warning.
+BODY_REQUIRED_TYPES: frozenset[str] = frozenset({"capability", "flow"})
+BODY_MIN_CHARS: int = 80
+
 
 class SchemaError(ValueError):
     """Raised when a node or edge violates the schema."""
@@ -112,10 +134,28 @@ def validate_status(status: str) -> None:
         )
 
 
+def relations_allowed_for_pair(from_type: str, to_type: str) -> list[str]:
+    """Return the sorted list of relations valid between these node types."""
+    return sorted(
+        {rel for (rel, ft, tt) in ALLOWED_RELATIONS if ft == from_type and tt == to_type}
+    )
+
+
+def relations_allowed_from(from_type: str) -> dict[str, list[str]]:
+    """Return {to_type: [relations]} for everything reachable from from_type."""
+    out: dict[str, set[str]] = {}
+    for rel, ft, tt in ALLOWED_RELATIONS:
+        if ft == from_type:
+            out.setdefault(tt, set()).add(rel)
+    return {k: sorted(v) for k, v in sorted(out.items())}
+
+
 def validate_relation(relation: str) -> None:
     if relation not in RELATIONS:
         raise SchemaError(
-            f"Unknown relation {relation!r}. Allowed: {sorted(RELATIONS)}"
+            f"Unknown relation {relation!r}. "
+            f"Allowed relations: {sorted(RELATIONS)}. "
+            f"Tip: call lore_schema to see which relations apply to a type pair."
         )
 
 
@@ -129,9 +169,42 @@ def validate_edge_types(relation: str, from_type: str, to_type: str) -> None:
     validate_node_type(from_type)
     validate_node_type(to_type)
     if not is_relation_allowed(relation, from_type, to_type):
+        valid_for_pair = relations_allowed_for_pair(from_type, to_type)
+        if valid_for_pair:
+            hint = (
+                f"Allowed for {from_type}→{to_type}: {valid_for_pair}."
+            )
+        else:
+            # No relation is valid for this exact pair. Show what would be
+            # valid from the same source type so the LLM can fix the to_id.
+            from_targets = relations_allowed_from(from_type)
+            if from_targets:
+                hint = (
+                    f"No relation is valid for {from_type}→{to_type}. "
+                    f"From {from_type!r} you can reach: {from_targets}."
+                )
+            else:
+                hint = f"No outgoing relations defined for {from_type!r}."
         raise SchemaError(
-            f"Relation {relation!r} is not allowed from {from_type!r} to {to_type!r}"
+            f"Relation {relation!r} is not allowed from {from_type!r} to "
+            f"{to_type!r}. {hint}"
         )
+
+
+def _suggest_kebab(node_id: str) -> str:
+    """Best-effort fix for common id mistakes (dots, colons, spaces, _,
+    uppercase). Not a guarantee of validity — the caller still re-validates."""
+    out = []
+    last_was_sep = False
+    for ch in node_id.strip():
+        if ch.isalnum():
+            out.append(ch.lower())
+            last_was_sep = False
+        else:
+            if not last_was_sep and out:
+                out.append("-")
+                last_was_sep = True
+    return "".join(out).strip("-")
 
 
 def is_valid_id(node_id: str) -> bool:
@@ -146,9 +219,57 @@ def is_valid_id(node_id: str) -> bool:
     return all(c.islower() or c.isdigit() or c == "-" for c in node_id)
 
 
+def _id_bad_chars(node_id: str) -> list[str]:
+    seen: list[str] = []
+    for ch in node_id:
+        if ch.islower() or ch.isdigit() or ch == "-":
+            continue
+        if ch not in seen:
+            seen.append(ch)
+    return seen
+
+
 def validate_id(node_id: str) -> None:
-    if not is_valid_id(node_id):
-        raise SchemaError(
-            f"Invalid id {node_id!r}. Use kebab-case: lowercase letters, digits, "
-            f"and single hyphens."
-        )
+    if is_valid_id(node_id):
+        return
+    if not node_id:
+        raise SchemaError("Invalid id: empty string. Use kebab-case.")
+    bad = _id_bad_chars(node_id)
+    suggestion = _suggest_kebab(node_id)
+    parts: list[str] = [f"Invalid id {node_id!r}."]
+    if bad:
+        parts.append(f"Bad chars: {bad}.")
+    if node_id.startswith("-") or node_id.endswith("-"):
+        parts.append("Cannot start or end with '-'.")
+    if "--" in node_id:
+        parts.append("No double hyphens.")
+    parts.append("Use kebab-case: lowercase letters, digits, single hyphens.")
+    if suggestion and suggestion != node_id and is_valid_id(suggestion):
+        parts.append(f"Did you mean {suggestion!r}?")
+    raise SchemaError(" ".join(parts))
+
+
+def schema_descriptor() -> dict[str, object]:
+    """Machine-readable summary of the schema, exposed via the lore_schema
+    MCP tool so an LLM can self-check before writing."""
+    by_pair: dict[str, list[str]] = {}
+    for rel, ft, tt in ALLOWED_RELATIONS:
+        by_pair.setdefault(f"{ft}->{tt}", []).append(rel)
+    return {
+        "node_types": sorted(NODE_TYPES),
+        "node_statuses": sorted(NODE_STATUSES),
+        "relations": sorted(RELATIONS),
+        "allowed_pairs": {k: sorted(v) for k, v in sorted(by_pair.items())},
+        "metadata": {
+            "source_canonical": sorted(CANONICAL_SOURCES),
+            "confidence_canonical": sorted(CANONICAL_CONFIDENCES),
+            "required_keys_recommended": ["source", "confidence", "source_ref"],
+        },
+        "id_format": (
+            "kebab-case: lowercase letters, digits, single hyphens; "
+            "no leading/trailing hyphen, no double hyphens"
+        ),
+        "body_min_chars_for": {
+            t: BODY_MIN_CHARS for t in sorted(BODY_REQUIRED_TYPES)
+        },
+    }

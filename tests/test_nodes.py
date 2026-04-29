@@ -25,7 +25,10 @@ def test_add_and_get_node(conn):
     assert node["metadata"] == {"tags": ["billing"]}
 
     fetched = get_node(conn, "payments")
-    assert fetched == node
+    # add_node() augments the persisted node with a soft-validation
+    # `warnings` list; get_node() returns the raw row.
+    assert fetched is not None
+    assert {k: v for k, v in node.items() if k != "warnings"} == fetched
 
 
 def test_add_duplicate_raises(conn):
