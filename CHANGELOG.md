@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-04-29
+
+First minor bump — driven by an audit of the plugin's real-world usage in
+3 active projects (Echolab, NS Backoffice, Spainfilmhub Web). Targets the
+classes of mistake LLMs were repeatedly making and adds the telemetry we
+need to keep iterating.
+
+### Added
+- **`lore_schema` MCP tool** — read-only descriptor of node types,
+  statuses, allowed relations per `(from_type, to_type)` pair, recommended
+  metadata vocabulary, id format, and body minimums. The LLM can call it
+  before a batch write instead of recovering from `SchemaError` rollbacks.
+- **Soft validation warnings on writes** — `add_node` / `add_nodes` now
+  return a `warnings` list per node. Triggers:
+  - `body_thin`: `capability` / `flow` with body < 80 chars.
+  - `missing_source`, `non_canonical_source`: `metadata.source` outside
+    the canonical vocabulary (`user_stated | user_confirmed |
+    inferred_from_code | inferred_from_conversation | code_change |
+    scan | incident | manual`).
+  - `missing_confidence`, `non_canonical_confidence`,
+    `missing_source_ref`.
+  - `orphan`: freshly created `rule` / `decision` with no outgoing edges.
+  Warnings never block persistence.
+- **Extended audit_log telemetry** — new columns: `node_type`,
+  `latency_ms`, `warnings_count`, `client_id`. Aditive migration runs
+  automatically on `open_db`. Opt-out via `LORE_TELEMETRY=0`.
+- **`lore quality` CLI command** — content-quality snapshot:
+  body/source/source_ref coverage by type, list of thin-body nodes,
+  non-canonical sources, orphans by type, top schema errors, warnings
+  distribution. Complements `lore audit` (structural integrity).
+- **`lore stats --by-day --errors`** — temporal breakdown of calls /
+  errors / warnings, plus top error messages with first/last seen.
+  Supports `--json` for piping.
+
+### Changed
+- **`SchemaError` messages now include the relations valid for the exact
+  `(from_type, to_type)` pair** instead of dumping all 9 relations. When
+  no relation is valid for the pair, the message lists the reachability
+  map for the source type ("From 'rule' you can reach: …").
+- **Invalid id messages are actionable** — they list the bad characters
+  detected and suggest a kebab-case fix (`Invalid id 'module.frontend.x'.
+  Bad chars: ['.']. … Did you mean 'module-frontend-x'?`).
+- **`lore_add_node(s)` minimal default response** — returns
+  `{id, type, status, warnings}` by default; the full persisted node is
+  available via `return_mode='full'`. Cuts NS-Backoffice-class write
+  output ~3× without losing data the LLM can't re-derive.
+
+### Notes for upgrades
+- Existing `.lore/lore.db` files are upgraded in place on next open.
+- The `metadata.source` enum is *advisory* in this release: non-canonical
+  values still persist with a warning. A future release may tighten this
+  if the warning channel proves effective.
+
 ## [0.0.20] — 2026-04-25
 
 ### Added

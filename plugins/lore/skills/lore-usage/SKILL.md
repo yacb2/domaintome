@@ -67,7 +67,7 @@ later audit what was inferred vs. stated. Standard keys:
 
 | Key | Values / format | When |
 |---|---|---|
-| `source` | `user_stated` \| `user_confirmed` \| `inferred_from_code` \| `inferred_from_conversation` | Always |
+| `source` | `user_stated` \| `user_confirmed` \| `inferred_from_code` \| `inferred_from_conversation` \| `code_change` \| `scan` \| `incident` \| `manual` | Always |
 | `confidence` | `high` \| `medium` \| `low` | Always |
 | `source_context` | one-line free text, e.g. `"conversation 2026-04-22"` or `"read src/foo/bar.py:42"` | Always |
 | `source_ref` | `path:line` of the code it represents | When tracking a concrete code artifact |

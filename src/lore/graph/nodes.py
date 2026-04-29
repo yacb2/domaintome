@@ -13,6 +13,22 @@ from lore.graph.schema import (
     validate_node_type,
     validate_status,
 )
+from lore.graph.warnings import orphan_warning, warnings_for_node_spec
+
+
+def _build_warnings(
+    conn: sqlite3.Connection,
+    *,
+    node_id: str,
+    node_type: str,
+    body: str | None,
+    metadata: dict[str, Any] | None,
+) -> list[str]:
+    out = warnings_for_node_spec(node_type=node_type, body=body, metadata=metadata)
+    orphan = orphan_warning(conn, node_id=node_id, node_type=node_type)
+    if orphan:
+        out.append(orphan)
+    return out
 
 
 def add_node(
@@ -26,7 +42,10 @@ def add_node(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Insert a new node. Raises SchemaError on validation failure or
-    sqlite3.IntegrityError if the id already exists."""
+    sqlite3.IntegrityError if the id already exists.
+
+    Returns the persisted node (including its `warnings` list — empty when
+    the spec is fully canonical)."""
     validate_id(node_id)
     validate_node_type(type)
     validate_status(status)
@@ -44,7 +63,12 @@ def add_node(
         (node_id, type, title, body, status, meta_json, now, now),
     )
     conn.commit()
-    return get_node(conn, node_id)  # type: ignore[return-value]
+    node = get_node(conn, node_id)
+    assert node is not None
+    node["warnings"] = _build_warnings(
+        conn, node_id=node_id, node_type=type, body=body, metadata=metadata
+    )
+    return node
 
 
 def update_node(
@@ -137,7 +161,8 @@ def add_nodes_batch(
     """Insert many nodes in one transaction. Each spec must have keys
     `id`, `type`, `title`; optional: `body`, `status`, `metadata`.
 
-    Fails atomically: if any spec is invalid, none are inserted."""
+    Fails atomically: if any spec is invalid, none are inserted. Each
+    returned dict carries a `warnings` list."""
     prepared: list[tuple[Any, ...]] = []
     now = now_iso()
     for s in specs:
@@ -172,16 +197,26 @@ def add_nodes_batch(
         prepared,
     )
     conn.commit()
-    return [
-        {
-            "id": s["id"],
-            "type": s["type"],
-            "title": s["title"],
-            "body": s.get("body"),
-            "status": s.get("status", "active"),
-            "metadata": s.get("metadata") or {},
-            "created_at": now,
-            "updated_at": now,
-        }
-        for s in specs
-    ]
+    results: list[dict[str, Any]] = []
+    for s in specs:
+        warnings = _build_warnings(
+            conn,
+            node_id=s["id"],
+            node_type=s["type"],
+            body=s.get("body"),
+            metadata=s.get("metadata"),
+        )
+        results.append(
+            {
+                "id": s["id"],
+                "type": s["type"],
+                "title": s["title"],
+                "body": s.get("body"),
+                "status": s.get("status", "active"),
+                "metadata": s.get("metadata") or {},
+                "created_at": now,
+                "updated_at": now,
+                "warnings": warnings,
+            }
+        )
+    return results
