@@ -4,23 +4,16 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 
 from lore.export import export_markdown as _export_markdown
-from datetime import datetime, timezone
-
 from lore.graph import (
     audit as _audit,
 )
-from lore.graph import (
-    update_node as _update_node,
-)
-from lore.graph.queries import FINDING_KEYS
-from lore.lifecycle import reconcile as _reconcile
-from lore.sync import compute_sync_report as _compute_sync_report
 from lore.graph import (
     find_variants as _find_variants,
 )
@@ -34,11 +27,21 @@ from lore.graph import (
 from lore.graph import (
     stats as _stats,
 )
+from lore.graph import (
+    update_node as _update_node,
+)
 from lore.graph.quality import (
     errors_breakdown as _errors_breakdown,
+)
+from lore.graph.quality import (
     quality_report as _quality_report,
+)
+from lore.graph.quality import (
     stats_by_day as _stats_by_day,
 )
+from lore.graph.queries import FINDING_KEYS
+from lore.lifecycle import reconcile as _reconcile
+from lore.sync import compute_sync_report as _compute_sync_report
 
 DEFAULT_DB = Path(".lore") / "lore.db"
 
@@ -242,7 +245,7 @@ def verify(
 
     _require_db(db)
     conn = open_db(db)
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     try:
         _update_node(
             conn, node_id, metadata_patch={"last_verified_at": today}
@@ -268,7 +271,10 @@ def reconcile(
         Path | None,
         typer.Option(
             "--root",
-            help="Project root used to resolve source_ref. Defaults to the DB's parent's parent (i.e. the dir that contains .lore/).",
+            help=(
+                "Project root used to resolve source_ref. Defaults to the "
+                "DB's parent's parent (i.e. the dir that contains .lore/)."
+            ),
         ),
     ] = None,
     json_output: Annotated[
@@ -279,7 +285,10 @@ def reconcile(
         bool,
         typer.Option(
             "--quiet",
-            help="Suppress output on clean scans. Exit 0 if no drift, 1 otherwise. Useful for hooks.",
+            help=(
+                "Suppress output on clean scans. Exit 0 if no drift, "
+                "1 otherwise. Useful for hooks."
+            ),
         ),
     ] = False,
 ) -> None:

@@ -2,6 +2,12 @@
 
 > The living knowledge graph for your software project.
 
+> **Status: pre-1.0, solo-maintained.** Lore is functional and used in
+> production projects, but the API, the schema and the MCP surface may
+> still break between minor versions. Bug reports are welcome; feature
+> PRs may not be merged while the design stabilizes. The repository will
+> open up to broader collaboration once the API is stable (target: 1.0).
+
 **Lore** captures the business logic of a project — modules, capabilities, flows, events, rules, forms, entities and decisions — as a typed graph backed by SQLite, and exposes it over **MCP** so AI coding assistants (Claude Code, Cursor, Claude Desktop) can query and maintain it as part of normal work.
 
 It answers questions like *"how many ways of registering a payment exist?"*, *"what breaks if I touch `flow-checkout`?"* or *"which rules protect this entity?"* in a single tool call, with provenance, without re-exploring the codebase each time.

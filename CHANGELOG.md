@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-04-29
+
+### Added
+- GitHub Actions CI running ruff + pytest on Python 3.11 and 3.12 for
+  every push and PR.
+- README banner clarifying the pre-1.0, solo-maintained status of the
+  project.
+
+### Fixed
+- Lint cleanup across `src/` and `tests/` so the new CI passes from day 1.
+
 ## [0.1.0] — 2026-04-29
 
 First minor bump — driven by an audit of the plugin's real-world usage in
