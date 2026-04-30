@@ -142,15 +142,26 @@ def test_hooks_json_has_session_start() -> None:
 def test_hooks_json_has_post_tool_use_for_bash() -> None:
     data = json.loads((PLUGIN_DIR / "hooks" / "hooks.json").read_text())
     assert "PostToolUse" in data["hooks"], (
-        "PostToolUse hook expected to nudge after git commit"
+        "PostToolUse hook expected to nudge after git commit and edits"
     )
     post = data["hooks"]["PostToolUse"]
     assert isinstance(post, list) and post
-    matchers = [entry.get("matcher") for entry in post]
-    assert "Bash" in matchers, "PostToolUse must match the Bash tool"
-    bash_entry = next(e for e in post if e.get("matcher") == "Bash")
+    matchers = [entry.get("matcher") or "" for entry in post]
+    expected_tools = {"Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"}
+    covered = {
+        tool
+        for tool in expected_tools
+        for matcher in matchers
+        if tool in matcher.split("|")
+    }
+    assert covered == expected_tools, (
+        f"PostToolUse must cover {expected_tools}, missing {expected_tools - covered}"
+    )
+    entry = next(
+        e for e in post if "Bash" in (e.get("matcher") or "").split("|")
+    )
     assert any(
         h.get("type") == "command"
         and "lore hook-post-tool-use" in h.get("command", "")
-        for h in bash_entry.get("hooks", [])
+        for h in entry.get("hooks", [])
     ), "PostToolUse must invoke `lore hook-post-tool-use`"

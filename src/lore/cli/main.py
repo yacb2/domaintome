@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,7 +42,41 @@ from lore.graph.quality import (
 )
 from lore.graph.queries import FINDING_KEYS
 from lore.lifecycle import reconcile as _reconcile
-from lore.sync import compute_sync_report as _compute_sync_report
+from lore.sync import (
+    is_boring,
+    load_source_ref_index,
+    compute_sync_report as _compute_sync_report,
+)
+
+_EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+
+# Diff-content signals that suggest a code change introduces business
+# behavior worth a graph node (new endpoint, model, signal, rule, etc.).
+# Patterns are deliberately framework-level — a new private helper does
+# not match. False positives are cheap (Claude reads the diff and skips
+# the persist call); false negatives are equivalent to today's baseline.
+_BUSINESS_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*(async\s+)?def\s+\w+\s*\(", re.MULTILINE),
+    re.compile(r"^\s*class\s+\w+", re.MULTILINE),
+    re.compile(
+        r"@(receiver|api_view|action|shared_task|login_required|"
+        r"require_\w+|app\.(route|get|post|put|delete|patch)|"
+        r"router\.(get|post|put|delete|patch))\b"
+    ),
+    re.compile(r"\burlpatterns\b"),
+    re.compile(r"\bpath\(\s*[\"']"),
+    re.compile(r"\bmodels\.\w+Field\("),
+    re.compile(r"\bvalidate_\w+\s*\("),
+    re.compile(r"\bsignals?\.\w+\.connect\("),
+    re.compile(r"\b(export\s+)?(async\s+)?function\s+\w+"),
+    re.compile(r"\b(export\s+)?const\s+\w+\s*=\s*(async\s+)?\("),
+    re.compile(r"\b(defineStore|defineProps|defineEmits)\("),
+    re.compile(r"\b(useRouter|useStore|createRouter)\("),
+)
+
+_TEST_PATH = re.compile(
+    r"(^|/)tests?/|\.test\.|\.spec\.|(^|/)test_\w+\.py$|_test\.py$"
+)
 
 DEFAULT_DB = Path(".lore") / "lore.db"
 
@@ -516,15 +551,103 @@ def _format_sync_blocks(report: dict[str, Any], *, max_lines: int) -> list[str]:
     return blocks
 
 
+def _match_edit_path_to_nodes(
+    ref_index: dict[str, list[dict[str, str]]],
+    abs_path: str,
+) -> list[dict[str, str]]:
+    """Return nodes whose source_ref path is a suffix of abs_path.
+
+    Source refs in the wild are stored relative to repo or workspace root
+    (e.g. ``backend/apps/x/views.py`` or ``apps/x/views.py``); the absolute
+    path coming from an Edit/Write tool is canonical. Suffix matching makes
+    the lookup robust to either convention without forcing one.
+    """
+    if not abs_path:
+        return []
+    norm = abs_path.replace("\\", "/")
+    matches: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for key, nodes in ref_index.items():
+        if not key:
+            continue
+        if norm == key or norm.endswith("/" + key):
+            for n in nodes:
+                if n["id"] not in seen:
+                    seen.add(n["id"])
+                    matches.append(n)
+    return matches
+
+
+def _edit_target_path(tool_name: str, tool_input: dict[str, Any]) -> str:
+    if tool_name == "NotebookEdit":
+        return tool_input.get("notebook_path", "") or ""
+    return tool_input.get("file_path", "") or ""
+
+
+def _edit_old_new_text(
+    tool_name: str, tool_input: dict[str, Any]
+) -> tuple[str, str]:
+    """Pull old/new text out of the heterogeneous Edit-family tool inputs."""
+    if tool_name == "Edit":
+        return (
+            tool_input.get("old_string", "") or "",
+            tool_input.get("new_string", "") or "",
+        )
+    if tool_name == "Write":
+        return ("", tool_input.get("content", "") or "")
+    if tool_name == "MultiEdit":
+        edits = tool_input.get("edits") or []
+        old = "\n".join((e.get("old_string", "") or "") for e in edits)
+        new = "\n".join((e.get("new_string", "") or "") for e in edits)
+        return old, new
+    if tool_name == "NotebookEdit":
+        return (
+            tool_input.get("old_source", "") or "",
+            tool_input.get("new_source", "") or "",
+        )
+    return "", ""
+
+
+def _classify_edit_diff(tool_name: str, tool_input: dict[str, Any]) -> str:
+    """Cheap inference of whether an edit introduces business behavior.
+
+    Returns ``"business"`` if the new text adds at least one occurrence of
+    a framework-level signal (route decorator, model field, signal hook,
+    new function/class, store, etc.) that is not already in the old text.
+    Returns ``"boring"`` for paths that are structurally not business
+    (lockfiles, css, docs, tests). Returns ``"unknown"`` otherwise.
+    """
+    path = _edit_target_path(tool_name, tool_input)
+    if not path:
+        return "unknown"
+    norm = path.replace("\\", "/")
+    if is_boring(norm) or _TEST_PATH.search(norm):
+        return "boring"
+    old, new = _edit_old_new_text(tool_name, tool_input)
+    for pattern in _BUSINESS_PATTERNS:
+        if len(pattern.findall(new)) > len(pattern.findall(old)):
+            return "business"
+    return "unknown"
+
+
 @app.command(name="hook-post-tool-use")
 def hook_post_tool_use(
     db: DBOption = DEFAULT_DB,
 ) -> None:
-    """Emit JSON for a Claude Code PostToolUse hook (matcher: Bash).
+    """Emit JSON for a Claude Code PostToolUse hook.
 
-    Reads the hook payload on stdin. If the Bash command was a successful
-    `git commit`, lists the files in the resulting HEAD commit and nudges
-    the model to reflect them in the Lore graph. Stays silent otherwise.
+    Reads the hook payload on stdin. Two responsibilities:
+
+    - On a successful ``git commit`` (``Bash`` tool), list the files in
+      the resulting HEAD commit and nudge the model to reflect them in
+      the Lore graph.
+    - On ``Edit``/``Write``/``MultiEdit``/``NotebookEdit``, look up the
+      affected file path against ``metadata.source_ref`` of every node
+      and, when there is a match, nudge the model to verify or update
+      the linked nodes before moving on.
+
+    Stays silent for everything else, when the graph is missing or empty,
+    or when the edit path matches no node.
     """
     out: dict[str, Any] = {
         "hookSpecificOutput": {
@@ -539,12 +662,18 @@ def hook_post_tool_use(
         typer.echo(json.dumps(out))
         return
 
-    if payload.get("tool_name") != "Bash":
-        typer.echo(json.dumps(out))
-        return
+    tool_name = payload.get("tool_name")
+    tool_input = payload.get("tool_input") or {}
 
-    command = (payload.get("tool_input") or {}).get("command", "")
-    if "git commit" not in command:
+    if tool_name == "Bash":
+        if "git commit" not in tool_input.get("command", ""):
+            typer.echo(json.dumps(out))
+            return
+    elif tool_name in _EDIT_TOOLS:
+        if not _edit_target_path(tool_name, tool_input):
+            typer.echo(json.dumps(out))
+            return
+    else:
         typer.echo(json.dumps(out))
         return
 
@@ -562,16 +691,40 @@ def hook_post_tool_use(
         typer.echo(json.dumps(out))
         return
 
-    report = _compute_sync_report(conn, Path.cwd())
-    blocks = _format_sync_blocks(report, max_lines=15)
-    if blocks:
-        intro = (
-            "Lore checkpoint after `git commit`. The graph is the project's "
-            "living memory; reflect substantive changes before moving on."
-        )
-        out["hookSpecificOutput"]["additionalContext"] = (
-            intro + "\n\n" + "\n\n".join(blocks)
-        )
+    if tool_name == "Bash":
+        report = _compute_sync_report(conn, Path.cwd())
+        blocks = _format_sync_blocks(report, max_lines=15)
+        if blocks:
+            intro = (
+                "Lore checkpoint after `git commit`. The graph is the "
+                "project's living memory; reflect substantive changes "
+                "before moving on."
+            )
+            out["hookSpecificOutput"]["additionalContext"] = (
+                intro + "\n\n" + "\n\n".join(blocks)
+            )
+    else:
+        path = _edit_target_path(tool_name, tool_input)
+        ref_index = load_source_ref_index(conn)
+        nodes = _match_edit_path_to_nodes(ref_index, path)
+        if nodes:
+            ids = ", ".join(f"`{n['id']}`" for n in nodes[:5])
+            extra = f" (+{len(nodes) - 5} more)" if len(nodes) > 5 else ""
+            out["hookSpecificOutput"]["additionalContext"] = (
+                f"Lore: you just edited `{path}` — linked nodes: "
+                f"{ids}{extra}. If business behavior changed, update them "
+                f"via `lore_update_node` (or `lore_add_node`/"
+                f"`lore_add_edge` for new behavior) before moving on."
+            )
+        elif _classify_edit_diff(tool_name, tool_input) == "business":
+            out["hookSpecificOutput"]["additionalContext"] = (
+                f"Lore: you edited `{path}` and the diff looks like new "
+                f"behavior (new function, class, route, model field, "
+                f"signal, or store). If this introduces a new endpoint, "
+                f"model, signal, rule, flow, form, or decision, persist "
+                f"it now via `lore_add_node`/`lore_add_edge` with "
+                f"`metadata.source_ref` pointing at this file."
+            )
     typer.echo(json.dumps(out))
 
 

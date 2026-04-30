@@ -165,20 +165,26 @@ def build_server(db_path: str | Path) -> FastMCP:
         metadata: dict[str, Any] | None = None,
         return_mode: str = "summary",
     ) -> dict[str, Any]:
-        """Create a new node. Type must be one of: module, capability, flow,
-        event, rule, form, entity, decision.
+        """USE ME after introducing new business behavior in code: a new
+        endpoint/view, model, signal, management command, event, validation
+        rule, form, module, or architectural decision. Also when the user
+        confirms a flow that supersedes another, or when a new entity enters
+        the domain.
 
-        Write content (title, body) in the same natural language the user uses
-        in conversation. Populate `metadata.source` with one of
+        Type must be one of: module, capability, flow, event, rule, form,
+        entity, decision. Write `title`/`body` in the same natural language
+        the user uses. `metadata.source` and `metadata.confidence` are
+        canonical-only and rejected if invalid: pick `source` from
         `user_stated | user_confirmed | inferred_from_code |
-        inferred_from_conversation | code_change | scan | incident | manual`
-        and `metadata.confidence` (`high | medium | low`) so the graph stays
-        auditable.
+        inferred_from_conversation | code_change | scan | incident | manual`,
+        `confidence` from `high | medium | low`. Always set
+        `metadata.source_ref` (path or path:line) so the node can be
+        reconciled with code later.
 
         Returns `{id, type, status, warnings}` by default. Pass
-        `return_mode='full'` to receive the entire persisted node. Inspect
-        `warnings` to fix soft-validation issues (thin body, missing source,
-        orphan rule/decision, etc.) on the next call."""
+        `return_mode='full'` for the entire persisted node. Read `warnings`
+        to fix soft issues (thin body, missing source, orphan rule/decision)
+        on the next call."""
         node = _add_node(
             conn,
             node_id=id,
@@ -196,9 +202,12 @@ def build_server(db_path: str | Path) -> FastMCP:
         nodes: list[dict[str, Any]],
         return_mode: str = "summary",
     ) -> list[dict[str, Any]]:
-        """Batch-create nodes in a single transaction. Each item needs
-        `id`, `type`, `title`; optional `body`, `status`, `metadata`.
-        Fails atomically if any entry is invalid.
+        """USE ME when persisting several related nodes from the same change
+        (e.g. a new module plus its flows and rules) — atomic and cheaper
+        than repeated `lore_add_node` calls. Each item needs `id`, `type`,
+        `title`; optional `body`, `status`, `metadata` (same canonical
+        vocabulary as `lore_add_node`). Fails atomically if any entry is
+        invalid.
 
         Default response is the summary form per node; pass
         `return_mode='full'` for the full nodes."""
@@ -228,12 +237,18 @@ def build_server(db_path: str | Path) -> FastMCP:
         metadata: dict[str, Any] | None = None,
         metadata_patch: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Update fields on an existing node. Pass only fields that changed.
+        """USE ME after editing code that changes the behavior of an
+        existing node — refactored flow, model field added, rule tightened,
+        module reshaped. Also to soft-deprecate (`status="deprecated"`),
+        archive, or refresh `metadata.last_verified_at`. Pass only the
+        fields that changed.
 
-        Use `metadata_patch` to merge keys into existing metadata (preferred —
-        preserves provenance). Pass `null` as a value to remove a key. Use
-        `metadata` only for full replacement (rare). Cannot combine both.
-        Status values: active, draft, deprecated, superseded, archived."""
+        Prefer `metadata_patch` over `metadata`: it merges into existing
+        metadata and preserves provenance (`source`, `confidence`,
+        `source_ref`, history). Pass `null` as a value to remove a key.
+        Use `metadata` only for full replacement (rare). Cannot combine
+        both. Status values: active, draft, deprecated, superseded,
+        archived."""
         return _update_node(
             conn,
             id,
@@ -280,11 +295,18 @@ def build_server(db_path: str | Path) -> FastMCP:
         relation: str,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Create an edge between two existing nodes. The relation must be
-        valid for the node types. Common pairs: `part_of` (flow/capability/
-        form/event → module), `implements` (flow → capability), `depends_on`
-        (module/flow → module/flow), `triggers` (flow/event → event/flow),
-        `validates` (form → rule), `enforces` (rule → entity)."""
+        """USE ME after creating or updating nodes to wire them into the
+        rest of the graph: a new flow needs `implements` to its capability
+        and `part_of` to its module; a new rule needs `enforces` to the
+        entity it protects; a superseding decision needs `supersedes`. An
+        unconnected node is invisible in traversals.
+
+        The relation must be valid for the node types. Common pairs:
+        `part_of` (flow/capability/form/event → module), `implements`
+        (flow → capability), `depends_on` (module/flow → module/flow),
+        `triggers` (flow/event → event/flow), `validates` (form → rule),
+        `enforces` (rule → entity). Call `lore_schema` first if unsure —
+        cheaper than recovering from a `SchemaError`."""
         return _add_edge(
             conn,
             from_id=from_id,
@@ -296,8 +318,11 @@ def build_server(db_path: str | Path) -> FastMCP:
     @mcp.tool()
     @_instrumented(conn, "lore_add_edges", "batch_create")
     def lore_add_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Batch-create edges in a single transaction. Each item needs
-        `from_id`, `to_id`, `relation`; optional `metadata`."""
+        """USE ME when wiring several edges from the same change (e.g.
+        connecting a new flow to its capability and module at once) —
+        atomic and cheaper than repeated `lore_add_edge`. Each item needs
+        `from_id`, `to_id`, `relation`; optional `metadata`. Fails
+        atomically if any edge is invalid for its node-type pair."""
         return _add_edges_batch(conn, edges)
 
     @mcp.tool()

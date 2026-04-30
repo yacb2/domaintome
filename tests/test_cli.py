@@ -205,6 +205,182 @@ def test_hook_post_tool_use_silent_when_command_is_not_git_commit(tmp_path):
     assert _json.loads(result.output)["hookSpecificOutput"]["additionalContext"] == ""
 
 
+def test_hook_post_tool_use_nudges_on_edit_to_mapped_path(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    conn = open_db(db)
+    add_node(
+        conn,
+        node_id="video-model",
+        type="entity",
+        title="Video model",
+        metadata={"source_ref": "backend/apps/lab_media/models/video.py:12"},
+    )
+    conn.close()
+
+    edited = tmp_path / "backend/apps/lab_media/models/video.py"
+    payload = _json.dumps(
+        {"tool_name": "Edit", "tool_input": {"file_path": str(edited)}}
+    )
+    result = runner.invoke(
+        app, ["hook-post-tool-use", "--db", str(db)], input=payload
+    )
+    assert result.exit_code == 0, result.output
+    ctx = _json.loads(result.output)["hookSpecificOutput"]["additionalContext"]
+    assert "video-model" in ctx
+    assert "lore_update_node" in ctx
+
+
+def test_hook_post_tool_use_silent_on_edit_to_unmapped_path(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    conn = open_db(db)
+    add_node(
+        conn,
+        node_id="video-model",
+        type="entity",
+        title="Video model",
+        metadata={"source_ref": "backend/apps/lab_media/models/video.py"},
+    )
+    conn.close()
+
+    payload = _json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {"file_path": str(tmp_path / "unrelated/file.py")},
+        }
+    )
+    result = runner.invoke(
+        app, ["hook-post-tool-use", "--db", str(db)], input=payload
+    )
+    assert result.exit_code == 0
+    assert _json.loads(result.output)["hookSpecificOutput"]["additionalContext"] == ""
+
+
+def test_hook_post_tool_use_nudges_on_write_and_multiedit(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    conn = open_db(db)
+    add_node(
+        conn,
+        node_id="upload-flow",
+        type="flow",
+        title="Upload flow",
+        metadata={"source_ref": "src/features/uploads/store.ts"},
+    )
+    conn.close()
+
+    edited = tmp_path / "src/features/uploads/store.ts"
+    for tool in ("Write", "MultiEdit"):
+        payload = _json.dumps(
+            {"tool_name": tool, "tool_input": {"file_path": str(edited)}}
+        )
+        result = runner.invoke(
+            app, ["hook-post-tool-use", "--db", str(db)], input=payload
+        )
+        assert result.exit_code == 0, result.output
+        ctx = _json.loads(result.output)["hookSpecificOutput"][
+            "additionalContext"
+        ]
+        assert "upload-flow" in ctx, f"tool {tool} did not nudge"
+
+
+def test_hook_post_tool_use_nudges_unmapped_edit_with_business_signal(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    _seed(db)
+    payload = _json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(tmp_path / "apps/orders/views.py"),
+                "old_string": "class OrderListView(View):\n    pass\n",
+                "new_string": (
+                    "class OrderListView(View):\n"
+                    "    def post(self, request):\n"
+                    "        return JsonResponse({})\n"
+                ),
+            },
+        }
+    )
+    result = runner.invoke(
+        app, ["hook-post-tool-use", "--db", str(db)], input=payload
+    )
+    assert result.exit_code == 0, result.output
+    ctx = _json.loads(result.output)["hookSpecificOutput"]["additionalContext"]
+    assert "looks like new behavior" in ctx
+    assert "lore_add_node" in ctx
+
+
+def test_hook_post_tool_use_silent_for_unmapped_edit_without_signal(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    _seed(db)
+    payload = _json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(tmp_path / "apps/orders/views.py"),
+                "old_string": "# old comment",
+                "new_string": "# new comment",
+            },
+        }
+    )
+    result = runner.invoke(
+        app, ["hook-post-tool-use", "--db", str(db)], input=payload
+    )
+    assert result.exit_code == 0
+    assert _json.loads(result.output)["hookSpecificOutput"]["additionalContext"] == ""
+
+
+def test_hook_post_tool_use_silent_for_test_file_even_with_signal(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    _seed(db)
+    payload = _json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(tmp_path / "apps/orders/tests/test_views.py"),
+                "old_string": "",
+                "new_string": "def test_order_create():\n    pass\n",
+            },
+        }
+    )
+    result = runner.invoke(
+        app, ["hook-post-tool-use", "--db", str(db)], input=payload
+    )
+    assert result.exit_code == 0
+    assert _json.loads(result.output)["hookSpecificOutput"]["additionalContext"] == ""
+
+
+def test_hook_post_tool_use_silent_for_boring_path(tmp_path):
+    import json as _json
+
+    db = tmp_path / "lore.db"
+    _seed(db)
+    payload = _json.dumps(
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": str(tmp_path / "frontend/styles/theme.css"),
+                "content": ".btn { color: red; }",
+            },
+        }
+    )
+    result = runner.invoke(
+        app, ["hook-post-tool-use", "--db", str(db)], input=payload
+    )
+    assert result.exit_code == 0
+    assert _json.loads(result.output)["hookSpecificOutput"]["additionalContext"] == ""
+
+
 def test_hook_post_tool_use_silent_when_db_missing(tmp_path):
     import json as _json
 

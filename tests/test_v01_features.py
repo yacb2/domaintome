@@ -75,17 +75,31 @@ def test_thin_body_emits_warning():
     assert any("body_thin" in w for w in node["warnings"])
 
 
-# A4 — non-canonical source emits a warning, doesn't block.
-def test_non_canonical_source_warning():
+# A4 — non-canonical source is hard-rejected at write time so the
+# vocabulary stays clean instead of drifting through warnings nobody acts on.
+def test_non_canonical_source_is_rejected():
     conn = open_db(":memory:")
-    node = add_node(
-        conn,
-        node_id="m",
-        type="module",
-        title="M",
-        metadata={"source": "auto_scan", "confidence": "high", "source_ref": "x:1"},
-    )
-    assert any("non_canonical_source" in w for w in node["warnings"])
+    with pytest.raises(SchemaError) as exc:
+        add_node(
+            conn,
+            node_id="m",
+            type="module",
+            title="M",
+            metadata={"source": "auto_scan", "confidence": "high", "source_ref": "x:1"},
+        )
+    assert "auto_scan" in str(exc.value)
+
+
+def test_non_canonical_confidence_is_rejected():
+    conn = open_db(":memory:")
+    with pytest.raises(SchemaError):
+        add_node(
+            conn,
+            node_id="m",
+            type="module",
+            title="M",
+            metadata={"source": "user_stated", "confidence": "maybe"},
+        )
 
 
 # A5 — fresh rule with no edges -> orphan warning.
@@ -161,14 +175,19 @@ def test_quality_report_basic():
         title="M",
         metadata={"source": "user_stated", "confidence": "high", "source_ref": "x:1"},
     )
-    add_node(
-        conn,
-        node_id="cap-thin",
-        type="capability",
-        title="C",
-        body="x",
-        metadata={"source": "auto_scan"},  # missing conf + ref + non-canonical
+    # Insert a legacy node directly to simulate a graph created before the
+    # vocabulary was hard-enforced — quality_report still has to surface
+    # these so users can clean them up.
+    import json as _json
+    from lore.graph._common import now_iso
+    legacy_meta = _json.dumps({"source": "auto_scan"})
+    conn.execute(
+        "INSERT INTO nodes (id, type, title, body, status, metadata_json, "
+        "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("cap-thin", "capability", "C", "x", "active", legacy_meta,
+         now_iso(), now_iso()),
     )
+    conn.commit()
     rep = quality_report(conn)
     assert rep["node_total"] == 2
     assert rep["by_type"]["capability"]["total"] == 1
