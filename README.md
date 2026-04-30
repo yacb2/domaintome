@@ -8,7 +8,7 @@
 > PRs may not be merged while the design stabilizes. The repository will
 > open up to broader collaboration once the API is stable (target: 1.0).
 
-**Lore** captures the business logic of a project — modules, capabilities, flows, events, rules, forms, entities and decisions — as a typed graph backed by SQLite, and exposes it over **MCP** so AI coding assistants (Claude Code, Cursor, Claude Desktop) can query and maintain it as part of normal work.
+**Lore** captures the business logic of a project — modules, capabilities, flows, events, rules, forms, entities and decisions — as a typed graph backed by SQLite, and exposes it over **MCP** so AI coding assistants (Claude Code, Claude Desktop) can query and maintain it as part of normal work.
 
 It answers questions like *"how many ways of registering a payment exist?"*, *"what breaks if I touch `flow-checkout`?"* or *"which rules protect this entity?"* in a single tool call, with provenance, without re-exploring the codebase each time.
 
@@ -60,7 +60,7 @@ pipx install projectlore   # or: uv tool install projectlore
 lore init
 ```
 
-For Cursor / Claude Desktop:
+For Claude Desktop / other MCP hosts:
 
 ```json
 {
