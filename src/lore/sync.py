@@ -86,7 +86,7 @@ def _changed_files(repo: Path, since: str | None) -> tuple[str, list[str]] | Non
     return (label, files) if files else None
 
 
-def _load_source_ref_index(
+def load_source_ref_index(
     conn: sqlite3.Connection,
 ) -> dict[str, list[dict[str, str]]]:
     """Index nodes by `metadata.source_ref` (path part only).
@@ -168,7 +168,7 @@ def compute_sync_report(
             "warnings": warnings,
         }
 
-    ref_index = _load_source_ref_index(conn)
+    ref_index = load_source_ref_index(conn)
     repo_reports: list[dict[str, Any]] = []
     total_mapped = total_unmapped = total_boring = 0
 

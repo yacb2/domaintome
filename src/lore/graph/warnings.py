@@ -39,26 +39,15 @@ def warnings_for_node_spec(
                 f"understand what this {node_type} is."
             )
     meta = metadata or {}
-    src = meta.get("source")
-    if src is None:
+    if meta.get("source") is None:
         out.append(
             "missing_source: metadata.source is required for provenance "
             f"(use one of: {sorted(CANONICAL_SOURCES)})."
-        )
-    elif src not in CANONICAL_SOURCES:
-        out.append(
-            f"non_canonical_source: metadata.source={src!r} is not in the "
-            f"recommended vocabulary {sorted(CANONICAL_SOURCES)}."
         )
     if meta.get("confidence") is None:
         out.append(
             "missing_confidence: metadata.confidence is recommended "
             f"({sorted(CANONICAL_CONFIDENCES)})."
-        )
-    elif meta.get("confidence") not in CANONICAL_CONFIDENCES:
-        out.append(
-            f"non_canonical_confidence: metadata.confidence="
-            f"{meta.get('confidence')!r} not in {sorted(CANONICAL_CONFIDENCES)}."
         )
     if meta.get("source_ref") is None:
         out.append(

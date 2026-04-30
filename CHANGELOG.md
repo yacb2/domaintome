@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-30
+
+Compliance-discipline release. Targets the failure mode documented in
+the post-mortem at `.context/issues/20260430-lore-compliance-discipline-friction.md`:
+long sessions where the agent made substantive business changes
+without ever invoking Lore. Adds a diff-aware nudge layer that
+converts memory-based discipline into notification-based discipline,
+plus a hard-reject of vocabulary drift at write time.
+
+### Added
+- **PostToolUse hook diff-aware on Edit/Write/MultiEdit/NotebookEdit.**
+  `lore hook-post-tool-use` now matches the Edit-family tools in
+  addition to `Bash`+`git commit`. On every edit it suffix-matches the
+  affected `file_path` against `metadata.source_ref` of all nodes via
+  the existing `load_source_ref_index`. When a match is found, injects
+  a short `additionalContext` listing the linked node ids and nudging
+  the agent to call `lore_update_node`/`lore_add_node`/`lore_add_edge`
+  before moving on. Cost: ~0 tokens when no match, ~80 tokens when
+  matched.
+- **Inferential business-signal classifier** for unmapped paths. When
+  the edited path is not in the graph, a regex-based diff classifier
+  decides whether the change adds framework-level signals (new
+  function/class, route decorator, model field, signal hook, store)
+  vs. boring touches (lockfiles, css, docs, tests, comment-only).
+  Business signals trigger a generic nudge to consider a new node;
+  boring or signal-less edits stay silent. Stateless — no counter, no
+  `.lore/state.json`, no per-turn tokens.
+- Plugin manifest: `PostToolUse` matcher widened to
+  `Bash|Edit|Write|MultiEdit|NotebookEdit`.
+- MCP write-tool docstrings (`lore_add_node`, `lore_add_nodes`,
+  `lore_update_node`, `lore_add_edge`, `lore_add_edges`) rewritten to
+  lead with `USE ME after…` plus concrete trigger lists, so the
+  invocation criterion is visible at the call site instead of buried
+  in the operating rules.
+- New public helper `lore.sync.load_source_ref_index` (renamed from
+  the previously private `_load_source_ref_index`) for cross-module
+  consumers.
+
+### Changed
+- **BREAKING (advisory): `metadata.source` and `metadata.confidence`
+  are now hard-rejected when the value is provided but not in the
+  canonical vocabulary.** Previously the value was persisted with a
+  soft warning. Missing values stay as soft warnings (adoption ramp).
+  New `validate_metadata_vocabulary` enforces this in `add_node`,
+  `update_node` (both `metadata` and `metadata_patch` branches), and
+  `add_nodes_batch`. Callers that emitted non-canonical values such as
+  `auto_scan` or `claude-session` will now receive a `SchemaError`
+  with a list of allowed values instead of a silent warning.
+- The `non_canonical_source` and `non_canonical_confidence` warning
+  blocks were removed from `warnings.py` (now unreachable on writes);
+  `quality_report` still surfaces these counts so legacy graphs can
+  be cleaned up.
+
 ## [0.1.3] — 2026-04-30
 
 ### Added

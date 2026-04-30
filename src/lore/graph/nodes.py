@@ -10,6 +10,7 @@ from lore.graph._common import now_iso, row_to_dict
 from lore.graph.schema import (
     SchemaError,
     validate_id,
+    validate_metadata_vocabulary,
     validate_node_type,
     validate_status,
 )
@@ -49,6 +50,7 @@ def add_node(
     validate_id(node_id)
     validate_node_type(type)
     validate_status(status)
+    validate_metadata_vocabulary(metadata)
     if not title or not title.strip():
         raise SchemaError("title is required and cannot be empty")
 
@@ -108,9 +110,11 @@ def update_node(
         fields.append("status = ?")
         values.append(status)
     if metadata is not None:
+        validate_metadata_vocabulary(metadata)
         fields.append("metadata_json = ?")
         values.append(json.dumps(metadata) if metadata else None)
     elif metadata_patch is not None:
+        validate_metadata_vocabulary(metadata_patch)
         merged = dict(existing.get("metadata") or {})
         for k, v in metadata_patch.items():
             if v is None:
@@ -176,6 +180,7 @@ def add_nodes_batch(
         if not title or not title.strip():
             raise SchemaError(f"title is required for node {node_id!r}")
         meta = s.get("metadata")
+        validate_metadata_vocabulary(meta)
         prepared.append(
             (
                 node_id,

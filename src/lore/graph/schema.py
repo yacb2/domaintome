@@ -150,6 +150,27 @@ def relations_allowed_from(from_type: str) -> dict[str, list[str]]:
     return {k: sorted(v) for k, v in sorted(out.items())}
 
 
+def validate_metadata_vocabulary(metadata: dict[str, Any] | None) -> None:
+    """Reject metadata with `source` or `confidence` outside the canonical
+    vocabulary. Missing keys remain a soft warning — only invalid values
+    fail. Catching invalid values at write time stops vocabulary drift at
+    the source instead of accumulating in `quality_report`."""
+    if not metadata:
+        return
+    src = metadata.get("source")
+    if src is not None and src not in CANONICAL_SOURCES:
+        raise SchemaError(
+            f"metadata.source={src!r} is not in the canonical vocabulary. "
+            f"Use one of: {sorted(CANONICAL_SOURCES)}."
+        )
+    conf = metadata.get("confidence")
+    if conf is not None and conf not in CANONICAL_CONFIDENCES:
+        raise SchemaError(
+            f"metadata.confidence={conf!r} is not canonical. "
+            f"Use one of: {sorted(CANONICAL_CONFIDENCES)}."
+        )
+
+
 def validate_relation(relation: str) -> None:
     if relation not in RELATIONS:
         raise SchemaError(
