@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-04-30
+
+### Changed
+- README: dropped Cursor from the list of supported MCP hosts. Lore is
+  Claude-Code-first by design (plugin, skills, sub-agent, slash commands
+  all target Claude Code); the MCP config snippet is now framed as
+  "Claude Desktop / other MCP hosts" so it remains usable for any host
+  without promoting a specific non-Anthropic editor.
+
 ## [0.2.1] — 2026-04-30
 
 ### Fixed
