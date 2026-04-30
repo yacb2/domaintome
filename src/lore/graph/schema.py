@@ -6,6 +6,8 @@ the schema before considering configurability.
 
 from __future__ import annotations
 
+from typing import Any
+
 NODE_TYPES: frozenset[str] = frozenset(
     {
         "module",

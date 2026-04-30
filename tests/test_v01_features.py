@@ -179,6 +179,7 @@ def test_quality_report_basic():
     # vocabulary was hard-enforced — quality_report still has to surface
     # these so users can clean them up.
     import json as _json
+
     from lore.graph._common import now_iso
     legacy_meta = _json.dumps({"source": "auto_scan"})
     conn.execute(

@@ -43,9 +43,11 @@ from lore.graph.quality import (
 from lore.graph.queries import FINDING_KEYS
 from lore.lifecycle import reconcile as _reconcile
 from lore.sync import (
+    compute_sync_report as _compute_sync_report,
+)
+from lore.sync import (
     is_boring,
     load_source_ref_index,
-    compute_sync_report as _compute_sync_report,
 )
 
 _EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}

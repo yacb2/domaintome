@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-04-30
+
+### Fixed
+- CI lint failures: added missing `from typing import Any` import in
+  `src/lore/graph/schema.py` and reordered import blocks in
+  `src/lore/cli/main.py` and `tests/test_v01_features.py` to satisfy
+  `ruff` I001.
+
 ## [0.2.2] — 2026-04-30
 
 ### Changed
