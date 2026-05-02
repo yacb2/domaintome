@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-05-02
+
+### Changed
+- `plugins/domaintome/.mcp.json` now invokes the MCP server via `uvx --from domaintome dt mcp` instead of expecting `dt` on `$PATH`. With DomainTome now published to PyPI (https://pypi.org/project/domaintome/), `/plugin install domaintome@domaintome` is a true single-step install — `uvx` fetches and caches the package on first run. Only prerequisite is having `uv` installed.
+- README "Install" section simplified accordingly. Removed "until PyPI publish" caveats; collapsed to a single `/plugin install` block.
+
 ## [0.3.2] — 2026-05-02
 
 ### Documentation
