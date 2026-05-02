@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] — 2026-05-02
+
+### Fixed
+- `release.yml`: pinned `astral-sh/setup-uv` to the explicit `@v8.1.0` tag. The repo does not currently publish a rolling `@v8` major alias, so the previous `@v8` reference failed to resolve in the v0.3.5 run. Other actions that do publish floating major tags (`actions/checkout@v6`, etc.) remain unchanged.
+
 ## [0.3.5] — 2026-05-02
 
 ### Changed
