@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-05-02
+
+### Documentation
+- README "Install" section now spells out the two-step install (`uv tool install` the binary, then `/plugin install` the plugin) and the planned single-step path via `uvx` after PyPI publish. Friction surfaced during rename validation: the plugin installs without `dt` on ``, and MCP tools silently fail to register. Tracked in workspace backlog `publish-domaintome-to-pypi.md`.
+
 ## [0.3.1] — 2026-05-02
 
 ### Fixed
