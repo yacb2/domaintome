@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] — 2026-05-02
+
+### Changed
+- CI / release workflows: bumped GitHub Actions to versions that support Node.js 24, ahead of the June 2026 deprecation deadline. `actions/checkout@v4` → `@v6`, `actions/setup-python@v5` → `@v6`, `actions/upload-artifact@v4` → `@v7`, `actions/download-artifact@v4` → `@v8`, `astral-sh/setup-uv@v3` → `@v8`. Pure infrastructure update; no behavior change.
+
 ## [0.3.4] — 2026-05-02
 
 ### Changed
