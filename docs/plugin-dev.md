@@ -84,7 +84,7 @@ Once validation passes and the repo is pushed to GitHub:
 
 ```
 /plugin marketplace add YACB2/domaintome
-/plugin install domaintome@domaintome
+/plugin install dt@domaintome
 ```
 
 The first argument is `<github-owner>/<repo>` (Claude Code reads
