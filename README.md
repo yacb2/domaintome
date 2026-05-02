@@ -39,26 +39,15 @@ Caveats: input-payload only (output answer not measured); does not include the o
 
 ## Install (Claude Code plugin — recommended)
 
-DomainTome ships as **two pieces**: a Python package (the `dt` binary, which runs the MCP server) and a Claude Code plugin (the marketplace metadata: skills, slash commands, hooks, MCP manifest). The plugin's `.mcp.json` invokes `dt mcp`, so the binary must be on `$PATH` *before* the plugin can talk to the graph.
-
-> **Until DomainTome is published to PyPI**, install the binary directly from the repo, then add the plugin:
-
-```bash
-# 1) Install the dt binary (one-time, places it on $PATH)
-uv tool install git+https://github.com/YACB2/domaintome   # or: pipx install git+https://github.com/YACB2/domaintome
-dt --version
 ```
-
-```
-# 2) Register and install the plugin in Claude Code
 /plugin marketplace add YACB2/domaintome
 /plugin install domaintome@domaintome
 /reload-plugins
 ```
 
-Once PyPI publishing lands, the install will collapse to a single `/plugin install` step (the `.mcp.json` will switch to `uvx --from domaintome dt mcp`, which auto-fetches the package on first run).
+The plugin's `.mcp.json` uses `uvx` to fetch the `domaintome` package from PyPI on first run, so the only prerequisite is having [`uv`](https://docs.astral.sh/uv/) installed (`brew install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`). No separate `pip install` step.
 
-Reload, then from the project you want to model run `dt init` (or `/dt:bootstrap` for a guided onboarding that scans the code with Haiku). "Project" can be a single repo *or* a workspace that contains several repos — DomainTome has no opinion, `.dt/graph.db` is created relative to whatever directory you launched Claude Code from.
+Reload, then from the project you want to model run `/dt:init` (or `/dt:bootstrap` for a guided onboarding that scans the code with Haiku). "Project" can be a single repo *or* a workspace that contains several repos — DomainTome has no opinion, `.dt/graph.db` is created relative to whatever directory you launched Claude Code from.
 
 The plugin bundles:
 
@@ -70,9 +59,7 @@ The plugin bundles:
 ## Install (standalone CLI / other MCP hosts)
 
 ```bash
-# Until PyPI publish: install from git
-uv tool install git+https://github.com/YACB2/domaintome
-# After PyPI publish: pipx install domaintome  (or: uv tool install domaintome)
+pipx install domaintome   # or: uv tool install domaintome
 dt init
 ```
 
