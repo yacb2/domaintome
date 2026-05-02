@@ -41,7 +41,7 @@ Caveats: input-payload only (output answer not measured); does not include the o
 
 ```
 /plugin marketplace add YACB2/domaintome
-/plugin install domaintome@domaintome
+/plugin install dt@domaintome
 /reload-plugins
 ```
 

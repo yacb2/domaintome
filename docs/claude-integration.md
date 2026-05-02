@@ -27,7 +27,7 @@ Inside any project where you use Claude Code:
 
 ```
 /plugin marketplace add YACB2/domaintome
-/plugin install domaintome@domaintome
+/plugin install dt@domaintome
 ```
 
 Claude Code will:
@@ -61,7 +61,7 @@ dt init          # creates .dt/graph.db in the current project
 
 ```
 /plugin marketplace update domaintome
-/plugin uninstall domaintome@domaintome
+/plugin uninstall dt@domaintome
 ```
 
 Disabling the plugin stops the MCP server and hides the skills/commands

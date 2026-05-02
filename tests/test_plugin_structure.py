@@ -51,7 +51,7 @@ def test_marketplace_manifest_has_required_fields() -> None:
 
 def test_plugin_manifest_has_required_fields() -> None:
     data = json.loads(PLUGIN_MANIFEST.read_text())
-    assert data["name"] == "domaintome"
+    assert data["name"] == "dt"
     assert data["version"], "version required — bump on every release"
     assert data["description"]
 

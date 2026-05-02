@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-02
+
+### Changed (BREAKING — plugin namespace)
+
+The Claude Code plugin name changes from `domaintome` to `dt`, so all slash
+commands now resolve under the `/dt:*` namespace that the rest of the
+surface area (CLI `dt`, `dt_*` MCP tools, `.dt/graph.db`, `dt-usage` skill)
+already used. Until 0.3.6 the plugin was registered as `domaintome`, which
+forced commands to be invoked as `/domaintome:reconcile`, `/domaintome:sync`,
+etc. — inconsistent with the documented `/dt:*` surface and confusing in
+practice.
+
+| Surface | Before | After |
+| --- | --- | --- |
+| Plugin name (`plugin.json` / `marketplace.json`) | `domaintome` | `dt` |
+| Install command | `/plugin install domaintome@domaintome` | `/plugin install dt@domaintome` |
+| Slash commands | `/domaintome:reconcile`, `/domaintome:sync`, ... | `/dt:reconcile`, `/dt:sync`, ... |
+
+The marketplace name (`domaintome`) and the PyPI package (`domaintome`)
+are unchanged. Only the plugin's `name` field — which Claude Code uses to
+build the slash-command namespace — moves to `dt`.
+
+### Migration
+
+Users on 0.3.x must reinstall, because Claude Code keys installed plugins
+by name:
+
+```
+/plugin uninstall domaintome@domaintome
+/plugin marketplace update domaintome
+/plugin install dt@domaintome
+/reload-plugins
+```
+
+No graph data changes. `.dt/graph.db` is untouched.
+
 ## [0.3.6] — 2026-05-02
 
 ### Fixed
