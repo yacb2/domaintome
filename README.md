@@ -2,6 +2,12 @@
 
 > The living knowledge graph for your software project.
 
+> **ARCHIVED (2026-09-12).** This repository is archived on GitHub and is no
+> longer developed or maintained. The working copy is kept for reference only:
+> treat it as read-only, and do not include it in fleet sweeps, dependency
+> updates or backlog work. The status note below describes the project as it
+> stood when development stopped.
+
 > **Status: pre-1.0, solo-maintained.** DomainTome is functional and used in
 > production projects, but the API, the schema and the MCP surface may
 > still break between minor versions. Bug reports are welcome; feature
